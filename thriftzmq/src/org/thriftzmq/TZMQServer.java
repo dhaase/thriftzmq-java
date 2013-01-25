@@ -29,13 +29,13 @@ public abstract class TZMQServer extends AbstractExecutionThreadService {
 
     public static abstract class AbstractServerArgs<T extends AbstractServerArgs<T>> {
 
-        protected final TZMQServerTransport serverTransport;
+        protected final TZMQTransportFactory transportFactory;
         protected TProcessorFactory processorFactory;
         protected TProtocolFactory inputProtocolFactory = new TBinaryProtocol.Factory();
         protected TProtocolFactory outputProtocolFactory = new TBinaryProtocol.Factory();
 
-        public AbstractServerArgs(TZMQServerTransport serverTransport) {
-            this.serverTransport = serverTransport;
+        public AbstractServerArgs(TZMQTransportFactory transportFactory) {
+            this.transportFactory = transportFactory;
         }
 
         @SuppressWarnings("unchecked")
@@ -70,13 +70,13 @@ public abstract class TZMQServer extends AbstractExecutionThreadService {
         }
     }
 
-    protected final TZMQServerTransport serverTransport;
+    protected final TZMQTransportFactory transportFactory;
     protected final TProcessorFactory processorFactory;
     protected final TProtocolFactory inputProtocolFactory;
     protected final TProtocolFactory outputProtocolFactory;
 
     public TZMQServer(AbstractServerArgs<?> args) {
-        this.serverTransport = args.serverTransport;
+        this.transportFactory = args.transportFactory;
         this.processorFactory = args.processorFactory;
         this.inputProtocolFactory = args.inputProtocolFactory;
         this.outputProtocolFactory = args.outputProtocolFactory;

@@ -21,6 +21,7 @@ import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
 import org.jeromq.ZMQ;
 import org.jeromq.ZMQ.Context;
+import org.jeromq.ZMQ.Socket;
 
 /**
  *
@@ -28,16 +29,27 @@ import org.jeromq.ZMQ.Context;
  */
 public class TZMQTransport extends TTransport {
 
+    //Size for output buffer
+    private static final int WRITE_BUFFER_SIZE = 4096;
+
     private final ZMQ.Context context;
     private final String address;
+    private final int socketType;
+    private final boolean bind;
 
     private ZMQ.Socket socket;
     private TByteArrayOutputStream writeBuffer = new TByteArrayOutputStream(1024);;
     private TMemoryInputTransport readBuffer = new TMemoryInputTransport(new byte[0]);;
 
-    public TZMQTransport(Context context, String address) {
+    public TZMQTransport(Context context, String address, int socketType, boolean bind) {
         this.context = context;
         this.address = address;
+        this.socketType = socketType;
+        this.bind = bind;
+    }
+
+    public Socket getSocket() {
+        return socket;
     }
 
     @Override
@@ -46,14 +58,20 @@ public class TZMQTransport extends TTransport {
     }
 
     @Override
-    public void open() throws TTransportException {
-        socket = context.socket(ZMQ.REQ);//TODO: Fix?
-        socket.connect(address);
+    public void open() {
+        socket = context.socket(socketType);
+        if (bind) {
+            socket.bind(address);
+        } else {
+            socket.connect(address);
+        }
     }
 
     @Override
     public void close() {
-        socket.close();
+        if (socket != null) {
+            socket.close();
+        }
         socket = null;
     }
 

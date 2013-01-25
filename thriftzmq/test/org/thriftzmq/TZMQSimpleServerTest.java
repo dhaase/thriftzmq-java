@@ -64,7 +64,7 @@ public class TZMQSimpleServerTest {
         System.out.println("serve");
         TZMQSimpleServer server = createServer();
         server.startAndWait();
-        TZMQTransport clientTransport = new TZMQTransport(context, INPROC_ENDPOINT);
+        TZMQTransport clientTransport = new TZMQTransport(context, INPROC_ENDPOINT, ZMQ.REQ, false);
         Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
         clientTransport.open();
         String s = "abcdABCD";
@@ -75,8 +75,8 @@ public class TZMQSimpleServerTest {
 
     private static TZMQSimpleServer createServer() {
         Service1Impl impl = new Service1Impl();
-        TZMQServerTransport serverTransport = new TZMQServerTransport(context, INPROC_ENDPOINT);
-        TZMQSimpleServer.Args args = new TZMQSimpleServer.Args(serverTransport);
+        TZMQTransportFactory socketFactory = new TZMQTransportFactory(context, INPROC_ENDPOINT, ZMQ.REP, true);
+        TZMQSimpleServer.Args args = new TZMQSimpleServer.Args(socketFactory);
         args.protocolFactory(new TCompactProtocol.Factory())
                 .processor(new Service1.Processor<Service1.Iface>(impl));
         TZMQSimpleServer instance = new TZMQSimpleServer(args);

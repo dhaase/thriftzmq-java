@@ -18,8 +18,6 @@ package org.thriftzmq;
 import org.apache.thrift.TException;
 import org.apache.thrift.TProcessor;
 import org.apache.thrift.protocol.TProtocol;
-import org.apache.thrift.transport.TMemoryBuffer;
-import org.apache.thrift.transport.TMemoryInputTransport;
 import org.jeromq.ZMQ;
 
 /**
@@ -30,8 +28,8 @@ public class TZMQSimpleServer extends TZMQServer {
 
     public static class Args extends TZMQServer.AbstractServerArgs<Args> {
 
-        public Args(TZMQServerTransport serverTransport) {
-            super(serverTransport);
+        public Args(TZMQTransportFactory socketFactory) {
+            super(socketFactory);
         }
         
     }
@@ -39,7 +37,7 @@ public class TZMQSimpleServer extends TZMQServer {
     private static final int POLL_TIMEOUT_MS = 1000;
 
     private ZMQ.Context context;
-    private ZMQ.Socket socket;
+    private TZMQTransport socket;
     private volatile boolean stop = false;
 
     public TZMQSimpleServer(Args args) {
@@ -49,50 +47,49 @@ public class TZMQSimpleServer extends TZMQServer {
     @Override
     protected void startUp() {
         this.stop = false;
-        context = serverTransport.getContext();
-        serverTransport.listen(ZMQ.REP);
+        context = transportFactory.getContext();
+        socket = transportFactory.create();
+        socket.open();
     }
 
     @Override
     public void run() {
-        socket = serverTransport.getSocket();
         ZMQ.Poller poller = context.poller(1);
-        poller.register(socket, ZMQ.Poller.POLLIN);
+        poller.register(socket.getSocket(), ZMQ.Poller.POLLIN);
 
         byte[] message;
         TProcessor processor = null;
-        TMemoryInputTransport inputTransport = null;
-        TMemoryBuffer outputTransport = null;
         TProtocol inputProtocol = null;
         TProtocol outputProtocol = null;
 
         while (!stop) {
             poller.poll(POLL_TIMEOUT_MS);
             if (poller.pollin(0)) {
-                message = socket.recv(0);//TODO: Flags?
-                inputTransport = new TMemoryInputTransport(message);
-                inputProtocol = inputProtocolFactory.getProtocol(inputTransport);
-                outputTransport = new TMemoryBuffer(0);//TODO: Optimize
-                outputProtocol = outputProtocolFactory.getProtocol(outputTransport);
-                processor = processorFactory.getProcessor(inputTransport);
+                //message = socket.recv(0);//TODO: Flags?
+                //inputTransport = new TMemoryInputTransport(message);
+                inputProtocol = inputProtocolFactory.getProtocol(socket);
+                //outputTransport = new TMemoryBuffer(0);//TODO: Optimize
+                outputProtocol = outputProtocolFactory.getProtocol(socket);
+                processor = processorFactory.getProcessor(socket);
                 try {
                     processor.process(inputProtocol, outputProtocol);
-                    byte[] rep = outputTransport.getArray();
-                    int len = outputTransport.length();
-                    socket.send(rep);//TODO: Don't send array tail
+                    //TODO: flush()?
+                    //byte[] rep = outputTransport.getArray();
+                    //int len = outputTransport.length();
+                    //socket.send(rep);//TODO: Don't send array tail
                 } catch (TException ex) {
                     //TODO: Handle
                     //Logger.getLogger(TZMQSimpleServer.class.getName()).log(Level.SEVERE, null, ex);
                 }
-                inputTransport.close();
-                outputTransport.close();
+                //inputTransport.close();
+                //outputTransport.close();
             }
         }
     }
 
     @Override
     protected void shutDown() {
-        serverTransport.close();
+        socket.close();
     }
 
     @Override

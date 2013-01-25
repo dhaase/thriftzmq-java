@@ -27,7 +27,6 @@ import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.transport.TMemoryBuffer;
 import org.apache.thrift.transport.TMemoryInputTransport;
 import org.jeromq.ZMQ;
-import org.jeromq.ZMQ.Socket;
 
 /**
  *
@@ -41,8 +40,8 @@ public class TZMQMultiThreadServer extends TZMQServer {
         protected ThreadGroup threadGroup = null;
         protected String serviceName;
 
-        public Args(TZMQServerTransport serverTransport, String serviceName) {
-            super(serverTransport);
+        public Args(TZMQTransportFactory transportFactory, String serviceName) {
+            super(transportFactory);
             this.serviceName = serviceName;
         }
 
@@ -61,7 +60,7 @@ public class TZMQMultiThreadServer extends TZMQServer {
 
     private String backEndpoint;
     private ZMQ.Context context;
-    private ZMQ.Socket frontend;
+    private TZMQTransport frontend;
     private ZMQ.Socket backend;
     private volatile boolean stop = false;
     private TZMQSimpleServer[] workers = null;
@@ -70,24 +69,9 @@ public class TZMQMultiThreadServer extends TZMQServer {
         super(args);
         backEndpoint = "inproc://" + args.serviceName;
         workers = new TZMQSimpleServer[args.threadCount];
-        this.context = args.serverTransport.getContext();
+        this.context = args.transportFactory.getContext();
         for (int i = 0; i < args.threadCount; i++) {
-            TZMQServerTransport workerTransport = new TZMQServerTransport(context, backEndpoint) {
-
-                private ZMQ.Socket socket;
-
-                @Override
-                public void listen(int socketType) {
-                    this.socket = context.socket(socketType);
-                    socket.connect(getAddress());
-                }
-
-                @Override
-                public Socket getSocket() {
-                    return this.socket;
-                }
-
-            };
+            TZMQTransportFactory workerTransport = new TZMQTransportFactory(context, backEndpoint, ZMQ.REP, false);
             TZMQSimpleServer.Args workerArgs = new TZMQSimpleServer.Args(workerTransport);
             workerArgs.inputProtocolFactory(args.inputProtocolFactory)
                     .outputProtocolFactory(args.outputProtocolFactory)
@@ -99,9 +83,9 @@ public class TZMQMultiThreadServer extends TZMQServer {
     @Override
     protected void startUp() throws InterruptedException, ExecutionException {
         this.stop = false;
-        context = serverTransport.getContext();
-        serverTransport.listen(ZMQ.ROUTER);
-        frontend = serverTransport.getSocket();
+        context = transportFactory.getContext();
+        frontend = transportFactory.create();
+        frontend.open();
         backend = context.socket(ZMQ.DEALER);
         backend.bind(backEndpoint);
         ListenableFuture<List<State>> f = Futures.successfulAsList(Iterables.transform(Arrays.asList(workers),
@@ -119,7 +103,7 @@ public class TZMQMultiThreadServer extends TZMQServer {
     @Override
     public void run() {
         ZMQ.Poller poller = context.poller(2);
-        poller.register(frontend, ZMQ.Poller.POLLIN);
+        poller.register(frontend.getSocket(), ZMQ.Poller.POLLIN);
         poller.register(backend, ZMQ.Poller.POLLIN);
 
         byte[] message;
@@ -135,8 +119,8 @@ public class TZMQMultiThreadServer extends TZMQServer {
             poller.poll(POLL_TIMEOUT_MS);
             if (poller.pollin(0)) {
                 do {
-                    message = frontend.recv(0);//TODO: Flags?
-                    more = frontend.hasReceiveMore();
+                    message = frontend.getSocket().recv(0);//TODO: Flags?
+                    more = frontend.getSocket().hasReceiveMore();
                     backend.send(message, more ? ZMQ.SNDMORE : 0);
                 } while (more);
             }
@@ -144,7 +128,7 @@ public class TZMQMultiThreadServer extends TZMQServer {
                 do {
                     message = backend.recv(0);//TODO: Flags?
                     more = backend.hasReceiveMore();
-                    frontend.send(message, more ? ZMQ.SNDMORE : 0);
+                    frontend.getSocket().send(message, more ? ZMQ.SNDMORE : 0);
                 } while (more);
             }
         }
@@ -152,7 +136,7 @@ public class TZMQMultiThreadServer extends TZMQServer {
 
     @Override
     protected void shutDown() {
-        serverTransport.close();
+        frontend.close();
     }
 
     @Override

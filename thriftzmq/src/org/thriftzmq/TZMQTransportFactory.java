@@ -21,16 +21,18 @@ import org.jeromq.ZMQ;
  *
  * @author Vyacheslav Baranov
  */
-public class TZMQServerTransport {
+public class TZMQTransportFactory {
 
     private final ZMQ.Context context;
     private final String address;
-    
-    private ZMQ.Socket socket;
+    private final int socketType;
+    private final boolean bind;
 
-    public TZMQServerTransport(ZMQ.Context context, String address) {
+    public TZMQTransportFactory(ZMQ.Context context, String address, int socketType, boolean bind) {
         this.context = context;
         this.address = address;
+        this.socketType = socketType;
+        this.bind = bind;
     }
 
     public ZMQ.Context getContext() {
@@ -41,19 +43,8 @@ public class TZMQServerTransport {
         return address;
     }
 
-    public void listen(int socketType) {
-        this.socket = context.socket(socketType);
-        socket.bind(address);
-    }
-
-    public ZMQ.Socket getSocket() {
-        return this.socket;
-    }
-
-    public void close() {
-        if (socket != null) {
-            socket.close();
-        }
+    public TZMQTransport create() {
+        return new TZMQTransport(context, address, socketType, bind);
     }
 
 }
