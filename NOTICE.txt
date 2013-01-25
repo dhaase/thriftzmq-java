@@ -1,0 +1,19 @@
+ThriftZMQ
+Copyright 2013 original authors as noted in the AUTHORS file.
+
+ZeroMQ protocol implementation provided by jeromq library
+from https://github.com/zeromq/jeromq
+Copyright (c) 1991-2011 iMatix Corporation <www.imatix.com>
+Copyright other contributors as noted in the AUTHORS file.
+
+Apache Thrift java bindings provided by libthrift
+from http://thrift.apache.org/
+Copyright 2006-2010 The Apache Software Foundation.
+
+Additional collections & concurrency promitives provided by Guava Libraries
+from http://code.google.com/p/guava-libraries/
+Copyright (C) 2012 The Guava Authors
+
+Logging facade provided by slf4j
+from http://www.slf4j.org/
+Copyright (c) 2004-2011 QOS.ch
