@@ -1,0 +1,9 @@
+<!--
+-->
+<ivysettings>
+  <settings defaultResolver="maven2"/>
+  <caches defaultCacheDir="${basedir}/${workspace.root.dir}/build/ivy-cache"/>
+  <resolvers>
+    <ibiblio name="maven2"  m2compatible="true"/>
+  </resolvers>
+</ivysettings>
