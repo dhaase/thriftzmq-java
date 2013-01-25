@@ -1,6 +1,9 @@
-*.class
+#Build output
+build/
+dist/
 
-# Package Files #
-*.jar
-*.war
-*.ear
+#Netbeans private files
+nbproject/private/
+
+#OS X
+.DS_Store
