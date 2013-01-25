@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ivy-module version="2.0"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://ant.apache.org/ivy/schemas/ivy.xsd">
+    <info organisation="org.thriftzmq" module="thriftzmq"
+            revision="0.0.1"/>
+    <configurations>
+        <conf name="compile"></conf>
+        <conf name="test" visibility="private" extends="compile"></conf>
+    </configurations>
+    <dependencies>
+        <dependency name="guava" org="com.google.guava" rev="13.0.1"/>
+        <dependency name="jeromq" org="org.jeromq" rev="0.2.0"/>
+        <dependency name="junit" org="junit" rev="4.10" conf="test->*"/>
+        <dependency name="libthrift" org="org.apache.thrift" rev="0.8.0" conf="*"/>
+        <dependency name="slf4j-api" org="org.slf4j" rev="1.6.6" conf="compile->*"/>
+        <dependency name="slf4j-jdk14" org="org.slf4j" rev="1.6.6" conf="test->*"/>
+    </dependencies>
+</ivy-module>
