@@ -15,6 +15,7 @@
  */
 package org.thriftzmq;
 
+import java.util.Random;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.jeromq.ZMQ;
@@ -60,14 +61,38 @@ public class TZMQSimpleServerTest {
      * Test of serve method, of class TZMQSimpleServer.
      */
     @Test
-    public void testServe() throws TException, InterruptedException {
-        System.out.println("serve");
+    public void testEcho() throws TException, InterruptedException {
+        System.out.println("echo");
         TZMQSimpleServer server = createServer();
         server.startAndWait();
         TZMQTransport clientTransport = new TZMQTransport(context, INPROC_ENDPOINT, ZMQ.REQ, false);
         Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
         clientTransport.open();
         String s = "abcdABCD";
+        String r = client.echo(s);
+        assertEquals(s, r);
+        server.stop();
+    }
+
+    /**
+     * Test of serve method, of class TZMQSimpleServer.
+     */
+    @Test
+    public void testEchoLong() throws TException, InterruptedException {
+        System.out.println("echoLong");
+        TZMQSimpleServer server = createServer();
+        server.startAndWait();
+        TZMQTransport clientTransport = new TZMQTransport(context, INPROC_ENDPOINT, ZMQ.REQ, false);
+        Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
+        clientTransport.open();
+        //String s = "abcdABCD";
+        int l = 1024 * 1024;
+        char c[] = new char[l];
+        Random rand = new Random(12345);
+        for (int i = 0; i < l; i++) {
+            c[i] = (char) (rand.nextInt(0x80 - 0x20) + 0x20);
+        }
+        String s = new String(c);
         String r = client.echo(s);
         assertEquals(s, r);
         server.stop();

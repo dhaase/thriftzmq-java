@@ -58,31 +58,20 @@ public class TZMQSimpleServer extends TZMQServer {
         poller.register(socket.getSocket(), ZMQ.Poller.POLLIN);
 
         byte[] message;
-        TProcessor processor = null;
-        TProtocol inputProtocol = null;
-        TProtocol outputProtocol = null;
 
         while (!stop) {
             poller.poll(POLL_TIMEOUT_MS);
             if (poller.pollin(0)) {
-                //message = socket.recv(0);//TODO: Flags?
-                //inputTransport = new TMemoryInputTransport(message);
-                inputProtocol = inputProtocolFactory.getProtocol(socket);
-                //outputTransport = new TMemoryBuffer(0);//TODO: Optimize
-                outputProtocol = outputProtocolFactory.getProtocol(socket);
-                processor = processorFactory.getProcessor(socket);
+                TProtocol inputProtocol = inputProtocolFactory.getProtocol(socket);
+                TProtocol outputProtocol = outputProtocolFactory.getProtocol(socket);
+                TProcessor processor = processorFactory.getProcessor(socket);
                 try {
                     processor.process(inputProtocol, outputProtocol);
                     //TODO: flush()?
-                    //byte[] rep = outputTransport.getArray();
-                    //int len = outputTransport.length();
-                    //socket.send(rep);//TODO: Don't send array tail
                 } catch (TException ex) {
                     //TODO: Handle
                     //Logger.getLogger(TZMQSimpleServer.class.getName()).log(Level.SEVERE, null, ex);
                 }
-                //inputTransport.close();
-                //outputTransport.close();
             }
         }
     }

@@ -15,6 +15,15 @@
  */
 package org.thriftzmq;
 
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.jeromq.ZMQ;
@@ -60,8 +69,8 @@ public class TZMQMultiThreadServerTest {
      * Test of serve method, of class TZMQSimpleServer.
      */
     @Test
-    public void testServe() throws TException, InterruptedException {
-        System.out.println("serve");
+    public void testEcho() throws TException, InterruptedException {
+        System.out.println("echo");
         TZMQMultiThreadServer server = createServer();
         server.startAndWait();
         TZMQTransport clientTransport = new TZMQTransport(context, INPROC_ENDPOINT, ZMQ.REQ, false);
@@ -70,15 +79,54 @@ public class TZMQMultiThreadServerTest {
         String s = "abcdABCD";
         String r = client.echo(s);
         assertEquals(s, r);
-        server.stop();
+        server.stopAndWait();
     }
+
+    private static class ClientWorker implements Callable<Void> {
+
+        private final String endpoint;
+
+        public ClientWorker(String endpoint) {
+            this.endpoint = endpoint;
+        }
+
+        @Override
+        public Void call() throws Exception {
+            TZMQTransport clientTransport = new TZMQTransport(context, INPROC_ENDPOINT, ZMQ.REQ, false);
+            Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
+            clientTransport.open();
+            String s = "abcdABCD";
+            String r = client.echo(s);
+            assertEquals(s, r);
+            return null;
+        }
+
+        
+    }
+
+    @Test
+    public void testEchoMultiThreaded() throws TException, InterruptedException, ExecutionException {
+        System.out.println("echoMultiThreaded");
+        TZMQMultiThreadServer server = createServer();
+        server.startAndWait();
+        int cnt = 100;
+        ListeningExecutorService executor = MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(10));
+        List<ListenableFuture<Void>> fl = new ArrayList<ListenableFuture<Void>>();
+        for (int i = 0; i < 100; i++) {
+            fl.add(executor.submit(new ClientWorker(INPROC_ENDPOINT)));
+        }
+        Futures.successfulAsList(fl).get();
+        server.stopAndWait();
+    }
+
 
     private static TZMQMultiThreadServer createServer() {
         Service1Impl impl = new Service1Impl();
         TZMQTransportFactory socketFactory = new TZMQTransportFactory(context, INPROC_ENDPOINT, ZMQ.ROUTER, true);
         TZMQMultiThreadServer.Args args = new TZMQMultiThreadServer.Args(socketFactory, "backend");
         args.protocolFactory(new TCompactProtocol.Factory())
-                .processor(new Service1.Processor<Service1.Iface>(impl));
+                .processor(new Service1.Processor<Service1.Iface>(impl))
+                .threadCount(5);
         TZMQMultiThreadServer instance = new TZMQMultiThreadServer(args);
         return instance;
     }

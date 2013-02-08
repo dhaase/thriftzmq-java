@@ -22,11 +22,15 @@ import com.google.common.util.concurrent.ListenableFuture;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.apache.thrift.TProcessor;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.transport.TMemoryBuffer;
 import org.apache.thrift.transport.TMemoryInputTransport;
 import org.jeromq.ZMQ;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -56,8 +60,11 @@ public class TZMQMultiThreadServer extends TZMQServer {
         }
     }
 
+    private static final Logger logger = LoggerFactory.getLogger(TZMQMultiThreadServer.class);
+
     private static final int POLL_TIMEOUT_MS = 1000;
 
+    private int threadCount;
     private String backEndpoint;
     private ZMQ.Context context;
     private TZMQTransport frontend;
@@ -68,26 +75,33 @@ public class TZMQMultiThreadServer extends TZMQServer {
     public TZMQMultiThreadServer(Args args) {
         super(args);
         backEndpoint = "inproc://" + args.serviceName;
-        workers = new TZMQSimpleServer[args.threadCount];
-        this.context = args.transportFactory.getContext();
-        for (int i = 0; i < args.threadCount; i++) {
-            TZMQTransportFactory workerTransport = new TZMQTransportFactory(context, backEndpoint, ZMQ.REP, false);
-            TZMQSimpleServer.Args workerArgs = new TZMQSimpleServer.Args(workerTransport);
-            workerArgs.inputProtocolFactory(args.inputProtocolFactory)
-                    .outputProtocolFactory(args.outputProtocolFactory)
-                    .processorFactory(args.processorFactory);
-            workers[i] = new TZMQSimpleServer(workerArgs);
-        }
+        this.threadCount = args.threadCount;
     }
 
     @Override
     protected void startUp() throws InterruptedException, ExecutionException {
         this.stop = false;
+
+        //Create workers
+        workers = new TZMQSimpleServer[threadCount];
+        this.context = transportFactory.getContext();
+        for (int i = 0; i < threadCount; i++) {
+            TZMQTransportFactory workerTransport = new TZMQTransportFactory(context, backEndpoint, ZMQ.REP, false);
+            TZMQSimpleServer.Args workerArgs = new TZMQSimpleServer.Args(workerTransport);
+            workerArgs.inputProtocolFactory(inputProtocolFactory)
+                    .outputProtocolFactory(outputProtocolFactory)
+                    .processorFactory(processorFactory);
+            workers[i] = new TZMQSimpleServer(workerArgs);
+        }
+
+        //Create sockets
         context = transportFactory.getContext();
         frontend = transportFactory.create();
         frontend.open();
         backend = context.socket(ZMQ.DEALER);
         backend.bind(backEndpoint);
+
+        //Start workers
         ListenableFuture<List<State>> f = Futures.successfulAsList(Iterables.transform(Arrays.asList(workers),
                 new Function<TZMQSimpleServer, ListenableFuture<State>>() {
 
@@ -136,7 +150,29 @@ public class TZMQMultiThreadServer extends TZMQServer {
 
     @Override
     protected void shutDown() {
+        //TODO: Graceful shutdown
+        ListenableFuture<List<State>> f = Futures.successfulAsList(Iterables.transform(Arrays.asList(workers),
+                new Function<TZMQSimpleServer, ListenableFuture<State>>() {
+
+                    @Override
+                    public ListenableFuture<State> apply(TZMQSimpleServer input) {
+                        return input.stop();
+                    }
+
+                }));
+        try {
+            f.get(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS);//TODO: Fix
+        } catch (InterruptedException ex) {
+            logger.warn("Interrupted on shutdown", ex);
+        } catch (ExecutionException ex) {
+            logger.warn("Exception while stopping workers", ex);
+        } catch (TimeoutException ex) {
+            logger.warn("Timeout on shutdown", ex);
+        }
         frontend.close();
+        backend.close();
+
+        workers = null;
     }
 
     @Override
