@@ -29,4 +29,14 @@ public class Service1Impl implements Service1.Iface {
         return s;
     }
 
+    @Override
+    public void voidMethod(String s) throws TException {
+        //Do nothing
+    }
+
+    @Override
+    public void onewayMethod(String s) throws TException {
+        throw new UnsupportedOperationException("Not supported yet.");
+    }
+
 }

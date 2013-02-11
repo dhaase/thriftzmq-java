@@ -58,7 +58,7 @@ public class TZMQSimpleServerTest {
     }
 
     /**
-     * Test of serve method, of class TZMQSimpleServer.
+     * Test of echo method
      */
     @Test
     public void testEcho() throws TException, InterruptedException {
@@ -71,11 +71,11 @@ public class TZMQSimpleServerTest {
         String s = "abcdABCD";
         String r = client.echo(s);
         assertEquals(s, r);
-        server.stop();
+        server.stopAndWait();
     }
 
     /**
-     * Test of serve method, of class TZMQSimpleServer.
+     * Test of echo method with long argument
      */
     @Test
     public void testEchoLong() throws TException, InterruptedException {
@@ -95,7 +95,23 @@ public class TZMQSimpleServerTest {
         String s = new String(c);
         String r = client.echo(s);
         assertEquals(s, r);
-        server.stop();
+        server.stopAndWait();
+    }
+
+    /**
+     * Test of voidMethod method
+     */
+    @Test
+    public void testVoidMethod() throws TException, InterruptedException {
+        System.out.println("voidMethod");
+        TZMQSimpleServer server = createServer();
+        server.startAndWait();
+        TZMQTransport clientTransport = new TZMQTransport(context, INPROC_ENDPOINT, ZMQ.REQ, false);
+        Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
+        clientTransport.open();
+        String s = "abcdABCD";
+        client.voidMethod(s);
+        server.stopAndWait();
     }
 
     private static TZMQSimpleServer createServer() {

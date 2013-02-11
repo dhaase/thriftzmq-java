@@ -19,4 +19,8 @@ namespace java org.thriftzmq.test
 service Service1 {
 
     string echo(1: string s);
+
+    void voidMethod(1: string s);
+
+    oneway void onewayMethod(1: string s);
 }

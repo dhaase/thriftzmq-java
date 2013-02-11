@@ -21,6 +21,7 @@ import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -82,6 +83,30 @@ public class TZMQMultiThreadServerTest {
         server.stopAndWait();
     }
 
+    /**
+     * Test of echo method with long argument
+     */
+    @Test
+    public void testEchoLong() throws TException, InterruptedException {
+        System.out.println("echoLong");
+        TZMQMultiThreadServer server = createServer();
+        server.startAndWait();
+        TZMQTransport clientTransport = new TZMQTransport(context, INPROC_ENDPOINT, ZMQ.REQ, false);
+        Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
+        clientTransport.open();
+        //String s = "abcdABCD";
+        int l = 1024 * 1024;
+        char c[] = new char[l];
+        Random rand = new Random(12345);
+        for (int i = 0; i < l; i++) {
+            c[i] = (char) (rand.nextInt(0x80 - 0x20) + 0x20);
+        }
+        String s = new String(c);
+        String r = client.echo(s);
+        assertEquals(s, r);
+        server.stopAndWait();
+    }
+
     private static class ClientWorker implements Callable<Void> {
 
         private final String endpoint;
@@ -119,6 +144,21 @@ public class TZMQMultiThreadServerTest {
         server.stopAndWait();
     }
 
+    /**
+     * Test of voidMethod method
+     */
+    @Test
+    public void testVoidMethod() throws TException, InterruptedException {
+        System.out.println("voidMethod");
+        TZMQMultiThreadServer server = createServer();
+        server.startAndWait();
+        TZMQTransport clientTransport = new TZMQTransport(context, INPROC_ENDPOINT, ZMQ.REQ, false);
+        Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
+        clientTransport.open();
+        String s = "abcdABCD";
+        client.voidMethod(s);
+        server.stopAndWait();
+    }
 
     private static TZMQMultiThreadServer createServer() {
         Service1Impl impl = new Service1Impl();
