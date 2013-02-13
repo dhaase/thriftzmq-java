@@ -43,6 +43,7 @@ import org.thriftzmq.test.Service1;
 public class TZMQMultiThreadServerTest {
 
     private static final String INPROC_ENDPOINT = "inproc://service1";
+    private static final String TCP_ENDPOINT = "tcp://localhost:23541";
 
     private static ZMQ.Context context;
 
@@ -72,9 +73,9 @@ public class TZMQMultiThreadServerTest {
     @Test
     public void testEcho() throws TException, InterruptedException {
         System.out.println("echo");
-        TZMQMultiThreadServer server = createServer();
+        TZMQMultiThreadServer server = createServer(TCP_ENDPOINT);
         server.startAndWait();
-        TZMQTransport clientTransport = new TZMQTransport(context, INPROC_ENDPOINT, ZMQ.REQ, false);
+        TZMQTransport clientTransport = new TZMQTransport(context, TCP_ENDPOINT, ZMQ.REQ, false);
         Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
         clientTransport.open();
         String s = "abcdABCD";
@@ -89,9 +90,9 @@ public class TZMQMultiThreadServerTest {
     @Test
     public void testEchoLong() throws TException, InterruptedException {
         System.out.println("echoLong");
-        TZMQMultiThreadServer server = createServer();
+        TZMQMultiThreadServer server = createServer(TCP_ENDPOINT);
         server.startAndWait();
-        TZMQTransport clientTransport = new TZMQTransport(context, INPROC_ENDPOINT, ZMQ.REQ, false);
+        TZMQTransport clientTransport = new TZMQTransport(context, TCP_ENDPOINT, ZMQ.REQ, false);
         Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
         clientTransport.open();
         //String s = "abcdABCD";
@@ -117,7 +118,7 @@ public class TZMQMultiThreadServerTest {
 
         @Override
         public Void call() throws Exception {
-            TZMQTransport clientTransport = new TZMQTransport(context, INPROC_ENDPOINT, ZMQ.REQ, false);
+            TZMQTransport clientTransport = new TZMQTransport(context, TCP_ENDPOINT, ZMQ.REQ, false);
             Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
             clientTransport.open();
             String s = "abcdABCD";
@@ -125,23 +126,66 @@ public class TZMQMultiThreadServerTest {
             assertEquals(s, r);
             return null;
         }
-
-        
     }
 
-    @Test
+    private static class PoolClientWorker implements Callable<Void> {
+
+        private final TZMQTransportPool pool;
+
+        public PoolClientWorker(TZMQTransportPool pool) {
+            this.pool = pool;
+        }
+
+        @Override
+        public Void call() throws Exception {
+            TZMQTransport clientTransport = pool.getClient();
+            Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
+            clientTransport.open();
+            try {
+                String s = "abcdABCD";
+                String r = client.echo(s);
+                assertEquals(s, r);
+            } finally {
+                clientTransport.close();
+            }
+            return null;
+        }
+    }
+
+    //@Test
     public void testEchoMultiThreaded() throws TException, InterruptedException, ExecutionException {
         System.out.println("echoMultiThreaded");
-        TZMQMultiThreadServer server = createServer();
+        TZMQMultiThreadServer server = createServer(TCP_ENDPOINT);
         server.startAndWait();
         int cnt = 100;
         ListeningExecutorService executor = MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(10));
         List<ListenableFuture<Void>> fl = new ArrayList<ListenableFuture<Void>>();
         for (int i = 0; i < 100; i++) {
-            fl.add(executor.submit(new ClientWorker(INPROC_ENDPOINT)));
+            fl.add(executor.submit(new ClientWorker(TCP_ENDPOINT)));
         }
         Futures.successfulAsList(fl).get();
         server.stopAndWait();
+    }
+
+    @Test
+    public void testEchoPooled() throws TException, InterruptedException, ExecutionException {
+        System.out.println("testEchoPooled");
+        TZMQMultiThreadServer server = createServer(INPROC_ENDPOINT);
+        server.startAndWait();
+        int cnt = 100;
+        ListeningExecutorService executor = MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(10));
+        List<ListenableFuture<Void>> fl = new ArrayList<ListenableFuture<Void>>();
+        TZMQTransportPool pool = new TZMQTransportPool(new TZMQTransportFactory(context, INPROC_ENDPOINT, ZMQ.DEALER, false));
+        pool.start();
+        try {
+            for (int i = 0; i < 100; i++) {
+                fl.add(executor.submit(new PoolClientWorker(pool)));
+            }
+            Futures.successfulAsList(fl).get();
+        } finally {
+            pool.stopAndWait();
+            server.stopAndWait();
+        }
     }
 
     /**
@@ -150,9 +194,9 @@ public class TZMQMultiThreadServerTest {
     @Test
     public void testVoidMethod() throws TException, InterruptedException {
         System.out.println("voidMethod");
-        TZMQMultiThreadServer server = createServer();
+        TZMQMultiThreadServer server = createServer(TCP_ENDPOINT);
         server.startAndWait();
-        TZMQTransport clientTransport = new TZMQTransport(context, INPROC_ENDPOINT, ZMQ.REQ, false);
+        TZMQTransport clientTransport = new TZMQTransport(context, TCP_ENDPOINT, ZMQ.REQ, false);
         Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
         clientTransport.open();
         String s = "abcdABCD";
@@ -160,9 +204,9 @@ public class TZMQMultiThreadServerTest {
         server.stopAndWait();
     }
 
-    private static TZMQMultiThreadServer createServer() {
+    private static TZMQMultiThreadServer createServer(String endpoint) {
         Service1Impl impl = new Service1Impl();
-        TZMQTransportFactory socketFactory = new TZMQTransportFactory(context, INPROC_ENDPOINT, ZMQ.ROUTER, true);
+        TZMQTransportFactory socketFactory = new TZMQTransportFactory(context, endpoint, ZMQ.ROUTER, true);
         TZMQMultiThreadServer.Args args = new TZMQMultiThreadServer.Args(socketFactory, "backend");
         args.protocolFactory(new TCompactProtocol.Factory())
                 .processor(new Service1.Processor<Service1.Iface>(impl))

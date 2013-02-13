@@ -3,7 +3,7 @@ build/
 dist/
 
 #Netbeans private files
-nbproject/private/
+*/nbproject/private/
 
 #OS X
 .DS_Store

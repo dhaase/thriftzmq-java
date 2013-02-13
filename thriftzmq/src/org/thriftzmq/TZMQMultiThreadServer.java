@@ -62,7 +62,7 @@ public class TZMQMultiThreadServer extends TZMQServer {
 
     private static final Logger logger = LoggerFactory.getLogger(TZMQMultiThreadServer.class);
 
-    private static final int POLL_TIMEOUT_MS = 1000;
+    private static final int POLL_TIMEOUT_MS = 100;
 
     private int threadCount;
     private String backEndpoint;
@@ -121,12 +121,6 @@ public class TZMQMultiThreadServer extends TZMQServer {
         poller.register(backend, ZMQ.Poller.POLLIN);
 
         byte[] message;
-        TProcessor processor = null;
-        TMemoryInputTransport inputTransport = null;
-        TMemoryBuffer outputTransport = null;
-        TProtocol inputProtocol = null;
-        TProtocol outputProtocol = null;
-
         boolean more;
 
         while (!stop) {
@@ -161,7 +155,7 @@ public class TZMQMultiThreadServer extends TZMQServer {
 
                 }));
         try {
-            f.get(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS);//TODO: Fix
+            f.get(POLL_TIMEOUT_MS * 10, TimeUnit.MILLISECONDS);//TODO: Fix
         } catch (InterruptedException ex) {
             logger.warn("Interrupted on shutdown", ex);
         } catch (ExecutionException ex) {
@@ -169,6 +163,7 @@ public class TZMQMultiThreadServer extends TZMQServer {
         } catch (TimeoutException ex) {
             logger.warn("Timeout on shutdown", ex);
         }
+        frontend.getSocket().setLinger(0);
         frontend.close();
         backend.close();
 
