@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
 import org.apache.thrift.TProcessor;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.transport.TMemoryBuffer;
@@ -42,11 +43,9 @@ public class TZMQMultiThreadServer extends TZMQServer {
 
         protected int threadCount = 1;
         protected ThreadGroup threadGroup = null;
-        protected String serviceName;
 
-        public Args(TZMQTransportFactory transportFactory, String serviceName) {
+        public Args(TZMQTransportFactory transportFactory) {
             super(transportFactory);
-            this.serviceName = serviceName;
         }
 
         public Args threadCount(int threadCount) {
@@ -63,24 +62,24 @@ public class TZMQMultiThreadServer extends TZMQServer {
     private static final Logger logger = LoggerFactory.getLogger(TZMQMultiThreadServer.class);
 
     private static final int POLL_TIMEOUT_MS = 100;
+    private static final AtomicLong socketId = new AtomicLong();
 
     private int threadCount;
     private String backEndpoint;
     private ZMQ.Context context;
     private TZMQTransport frontend;
     private ZMQ.Socket backend;
-    private volatile boolean stop = false;
+    private CommandSocket commandSocket;
     private TZMQSimpleServer[] workers = null;
 
     public TZMQMultiThreadServer(Args args) {
         super(args);
-        backEndpoint = "inproc://" + args.serviceName;
+        backEndpoint = "inproc://TZMQ_MTSERVER_" + Long.toHexString(socketId.incrementAndGet());
         this.threadCount = args.threadCount;
     }
 
     @Override
     protected void startUp() throws InterruptedException, ExecutionException {
-        this.stop = false;
 
         //Create workers
         workers = new TZMQSimpleServer[threadCount];
@@ -100,6 +99,8 @@ public class TZMQMultiThreadServer extends TZMQServer {
         frontend.open();
         backend = context.socket(ZMQ.DEALER);
         backend.bind(backEndpoint);
+        commandSocket = new CommandSocket(context);
+        commandSocket.open();
 
         //Start workers
         ListenableFuture<List<State>> f = Futures.successfulAsList(Iterables.transform(Arrays.asList(workers),
@@ -116,14 +117,15 @@ public class TZMQMultiThreadServer extends TZMQServer {
 
     @Override
     public void run() {
-        ZMQ.Poller poller = context.poller(2);
+        ZMQ.Poller poller = context.poller(3);
         poller.register(frontend.getSocket(), ZMQ.Poller.POLLIN);
         poller.register(backend, ZMQ.Poller.POLLIN);
+        poller.register(commandSocket.getSocket(), ZMQ.Poller.POLLIN);
 
         byte[] message;
         boolean more;
 
-        while (!stop) {
+        while (true) {
             poller.poll(POLL_TIMEOUT_MS);
             if (poller.pollin(0)) {
                 do {
@@ -138,6 +140,12 @@ public class TZMQMultiThreadServer extends TZMQServer {
                     more = backend.hasReceiveMore();
                     frontend.getSocket().send(message, more ? ZMQ.SNDMORE : 0);
                 } while (more);
+            }
+            if (poller.pollin(2)) {
+                byte cmd = commandSocket.recvCommand();
+                if (cmd == CommandSocket.STOP) {
+                    break;
+                }
             }
         }
     }
@@ -163,7 +171,9 @@ public class TZMQMultiThreadServer extends TZMQServer {
         } catch (TimeoutException ex) {
             logger.warn("Timeout on shutdown", ex);
         }
+        //XXX: For now force closing sockets to prevent hang on shutdown
         frontend.getSocket().setLinger(0);
+        backend.setLinger(0);
         frontend.close();
         backend.close();
 
@@ -172,7 +182,7 @@ public class TZMQMultiThreadServer extends TZMQServer {
 
     @Override
     protected void triggerShutdown() {
-        stop = true;
+        commandSocket.sendCommand(CommandSocket.STOP);
     }
 
 }

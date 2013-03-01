@@ -15,7 +15,7 @@
  */
 package org.thriftzmq;
 
-import org.apache.thrift.TByteArrayOutputStream;
+import java.nio.ByteBuffer;
 import org.apache.thrift.transport.TMemoryInputTransport;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
@@ -38,8 +38,9 @@ public class TZMQTransport extends TTransport {
     private final boolean bind;
 
     private ZMQ.Socket socket;
-    private TByteArrayOutputStream writeBuffer = new TByteArrayOutputStream(1024);;
-    private TMemoryInputTransport readBuffer = new TMemoryInputTransport(new byte[0]);;
+    private final ByteBuffer writeBuffer = ByteBuffer.allocate(WRITE_BUFFER_SIZE);
+    private TMemoryInputTransport readBuffer = new TMemoryInputTransport();
+    private boolean hasReceiveMore;
 
     public TZMQTransport(Context context, String address, int socketType, boolean bind) {
         this.context = context;
@@ -70,6 +71,8 @@ public class TZMQTransport extends TTransport {
     @Override
     public void close() {
         if (socket != null) {
+            //XXX: For now force closing socket to prevent hang on shutdown
+            socket.setLinger(0);
             socket.close();
         }
         socket = null;
@@ -106,10 +109,10 @@ public class TZMQTransport extends TTransport {
             int remaining = readBuffer.getBytesRemainingInBuffer();
             return remaining;
         }
+        return 0;
+        //readFrame();
 
-        readFrame();
-
-        return readBuffer.getBytesRemainingInBuffer();
+        //return readBuffer.getBytesRemainingInBuffer();
     }
 
     @Override
@@ -119,32 +122,45 @@ public class TZMQTransport extends TTransport {
 
     private void readFrame() {
         if (socket == null) {
-            throw new IllegalArgumentException("Attempt to read from closed transport");
+            throw new IllegalStateException("Attempt to read from closed transport");
         }
         byte[] r = socket.recv(0);//TODO: Flags?
+        hasReceiveMore = socket.hasReceiveMore();
         readBuffer.reset(r);
     }
 
     @Override
     public void write(byte[] buf, int off, int len) throws TTransportException {
-        if (socket == null) {
-            throw new IllegalArgumentException("Attempt to write to closed transport");
-        }
-        writeBuffer.write(buf, off, len);
+        do {
+            if (writeBuffer.remaining() == 0) {
+                sendBuffered(true);
+            }
+            int l = Math.min(writeBuffer.remaining(), len);
+            writeBuffer.put(buf, off, l);
+            off += l;
+            len -= l;
+        } while (len > 0);
     }
 
     @Override
     public void flush() throws TTransportException {
-        if (socket == null) {
-            throw new IllegalArgumentException("Attempt to write to closed transport");
-        }
-        byte[] buf = writeBuffer.get();
-        int len = writeBuffer.len();
-        writeBuffer.reset();
-        socket.send(buf);//TODO: Don't send array tail
+        sendBuffered(false);
         super.flush();
     }
 
+    private void sendBuffered(boolean more) throws TTransportException {
+        if (socket == null) {
+            throw new TTransportException("Attempt to write to closed transport");
+        }
+        //Buffer must be copied, because jeromq reads it asynchroniously
+        byte[] data;
+        int l = writeBuffer.position();
+        data = new byte[l];
+        writeBuffer.position(0);
+        writeBuffer.get(data);
+        socket.send(data, more ? ZMQ.SNDMORE : 0);
+        writeBuffer.clear();
+    }
 }
 
 

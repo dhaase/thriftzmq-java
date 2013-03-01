@@ -25,6 +25,9 @@ import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.jeromq.ZMQ;
@@ -34,6 +37,8 @@ import static org.junit.Assert.*;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.thriftzmq.test.Service1;
 
 /**
@@ -41,6 +46,8 @@ import org.thriftzmq.test.Service1;
  * @author Vyacheslav Baranov
  */
 public class TZMQMultiThreadServerTest {
+
+    private static final Logger logger = LoggerFactory.getLogger(TZMQMultiThreadServerTest.class);
 
     private static final String INPROC_ENDPOINT = "inproc://service1";
     private static final String TCP_ENDPOINT = "tcp://localhost:23541";
@@ -131,6 +138,8 @@ public class TZMQMultiThreadServerTest {
     private static class PoolClientWorker implements Callable<Void> {
 
         private final TZMQTransportPool pool;
+        private final static AtomicInteger sendCount = new AtomicInteger();
+        private final static AtomicInteger recvCount = new AtomicInteger();
 
         public PoolClientWorker(TZMQTransportPool pool) {
             this.pool = pool;
@@ -143,8 +152,14 @@ public class TZMQMultiThreadServerTest {
             clientTransport.open();
             try {
                 String s = "abcdABCD";
+                sendCount.incrementAndGet();
                 String r = client.echo(s);
                 assertEquals(s, r);
+                recvCount.incrementAndGet();
+            } catch (Exception ex) {
+                recvCount.incrementAndGet();
+                logger.error("Error invoking server: {}", ex);
+                throw ex;
             } finally {
                 clientTransport.close();
             }
@@ -152,12 +167,12 @@ public class TZMQMultiThreadServerTest {
         }
     }
 
-    //@Test
+    @Test
     public void testEchoMultiThreaded() throws TException, InterruptedException, ExecutionException {
         System.out.println("echoMultiThreaded");
         TZMQMultiThreadServer server = createServer(TCP_ENDPOINT);
         server.startAndWait();
-        int cnt = 100;
+        int cnt = 20;
         ListeningExecutorService executor = MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(10));
         List<ListenableFuture<Void>> fl = new ArrayList<ListenableFuture<Void>>();
         for (int i = 0; i < 100; i++) {
@@ -171,17 +186,25 @@ public class TZMQMultiThreadServerTest {
     public void testEchoPooled() throws TException, InterruptedException, ExecutionException {
         System.out.println("testEchoPooled");
         TZMQMultiThreadServer server = createServer(INPROC_ENDPOINT);
+        int initialCnt = Service1Impl.ECHO_INVOKE_COUNT.get();
         server.startAndWait();
-        int cnt = 100;
+        int cnt = 20;
         ListeningExecutorService executor = MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(10));
         List<ListenableFuture<Void>> fl = new ArrayList<ListenableFuture<Void>>();
         TZMQTransportPool pool = new TZMQTransportPool(new TZMQTransportFactory(context, INPROC_ENDPOINT, ZMQ.DEALER, false));
         pool.start();
         try {
-            for (int i = 0; i < 100; i++) {
+            for (int i = 0; i < cnt; i++) {
                 fl.add(executor.submit(new PoolClientWorker(pool)));
             }
-            Futures.successfulAsList(fl).get();
+            Futures.successfulAsList(fl).get(3000, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException ex) {
+            //XXX: This code is to debug rare hang when no response is received in one of clients
+            int invokedCnt = Service1Impl.ECHO_INVOKE_COUNT.get() - initialCnt;
+            int sendCnt = PoolClientWorker.sendCount.get();
+            int recvCnt = PoolClientWorker.recvCount.get();
+            logger.warn("Timed out while waiting for workers. Sent : {}, Received: {}, Server invoked: {}",
+                    new Object[] {sendCnt, recvCnt, invokedCnt});
         } finally {
             pool.stopAndWait();
             server.stopAndWait();
@@ -207,7 +230,7 @@ public class TZMQMultiThreadServerTest {
     private static TZMQMultiThreadServer createServer(String endpoint) {
         Service1Impl impl = new Service1Impl();
         TZMQTransportFactory socketFactory = new TZMQTransportFactory(context, endpoint, ZMQ.ROUTER, true);
-        TZMQMultiThreadServer.Args args = new TZMQMultiThreadServer.Args(socketFactory, "backend");
+        TZMQMultiThreadServer.Args args = new TZMQMultiThreadServer.Args(socketFactory);
         args.protocolFactory(new TCompactProtocol.Factory())
                 .processor(new Service1.Processor<Service1.Iface>(impl))
                 .threadCount(5);

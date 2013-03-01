@@ -19,6 +19,8 @@ import org.apache.thrift.TException;
 import org.apache.thrift.TProcessor;
 import org.apache.thrift.protocol.TProtocol;
 import org.jeromq.ZMQ;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -34,11 +36,13 @@ public class TZMQSimpleServer extends TZMQServer {
         
     }
 
+    private static final Logger logger = LoggerFactory.getLogger(TZMQSimpleServer.class);
+
     private static final int POLL_TIMEOUT_MS = 1000;
 
     private ZMQ.Context context;
     private TZMQTransport socket;
-    private volatile boolean stop = false;
+    private CommandSocket commandSocket;
 
     public TZMQSimpleServer(Args args) {
         super(args);
@@ -46,20 +50,22 @@ public class TZMQSimpleServer extends TZMQServer {
 
     @Override
     protected void startUp() {
-        this.stop = false;
         context = transportFactory.getContext();
         socket = transportFactory.create();
+        commandSocket = new CommandSocket(context);
         socket.open();
+        commandSocket.open();
     }
 
     @Override
     public void run() {
-        ZMQ.Poller poller = context.poller(1);
+        ZMQ.Poller poller = context.poller(2);
         poller.register(socket.getSocket(), ZMQ.Poller.POLLIN);
+        poller.register(commandSocket.getSocket(), ZMQ.Poller.POLLIN);
 
         byte[] message;
 
-        while (!stop) {
+        while (true) {
             poller.poll(POLL_TIMEOUT_MS);
             if (poller.pollin(0)) {
                 TProtocol inputProtocol = inputProtocolFactory.getProtocol(socket);
@@ -70,7 +76,13 @@ public class TZMQSimpleServer extends TZMQServer {
                     //TODO: flush()?
                 } catch (TException ex) {
                     //TODO: Handle
-                    //Logger.getLogger(TZMQSimpleServer.class.getName()).log(Level.SEVERE, null, ex);
+                    logger.error("Exception in request processor: {}",  ex);
+                }
+            }
+            if (poller.pollin(1)) {
+                byte cmd = commandSocket.recvCommand();
+                if (cmd == CommandSocket.STOP) {
+                    break;
                 }
             }
         }
@@ -78,12 +90,14 @@ public class TZMQSimpleServer extends TZMQServer {
 
     @Override
     protected void shutDown() {
+        //XXX: For now force closing socket to prevent hang on shutdown
+        socket.getSocket().setLinger(0);
         socket.close();
     }
 
     @Override
     protected void triggerShutdown() {
-        stop = true;
+        commandSocket.sendCommand(CommandSocket.STOP);
     }
 
 }

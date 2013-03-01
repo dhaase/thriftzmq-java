@@ -15,6 +15,7 @@
  */
 package org.thriftzmq;
 
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.thrift.TException;
 import org.thriftzmq.test.Service1;
 
@@ -24,8 +25,11 @@ import org.thriftzmq.test.Service1;
  */
 public class Service1Impl implements Service1.Iface {
 
+    public static final AtomicInteger ECHO_INVOKE_COUNT = new AtomicInteger();
+
     @Override
     public String echo(String s) throws TException {
+        ECHO_INVOKE_COUNT.incrementAndGet();
         return s;
     }
 

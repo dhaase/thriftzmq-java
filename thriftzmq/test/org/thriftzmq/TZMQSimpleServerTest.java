@@ -34,6 +34,7 @@ import org.thriftzmq.test.Service1;
 public class TZMQSimpleServerTest {
 
     private static final String INPROC_ENDPOINT = "inproc://service1";
+    private static final String TCP_ENDPOINT = "tcp://localhost:23541";
 
     private static ZMQ.Context context;
 
@@ -65,7 +66,7 @@ public class TZMQSimpleServerTest {
         System.out.println("echo");
         TZMQSimpleServer server = createServer();
         server.startAndWait();
-        TZMQTransport clientTransport = new TZMQTransport(context, INPROC_ENDPOINT, ZMQ.REQ, false);
+        TZMQTransport clientTransport = new TZMQTransport(context, TCP_ENDPOINT, ZMQ.REQ, false);
         Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
         clientTransport.open();
         String s = "abcdABCD";
@@ -82,7 +83,7 @@ public class TZMQSimpleServerTest {
         System.out.println("echoLong");
         TZMQSimpleServer server = createServer();
         server.startAndWait();
-        TZMQTransport clientTransport = new TZMQTransport(context, INPROC_ENDPOINT, ZMQ.REQ, false);
+        TZMQTransport clientTransport = new TZMQTransport(context, TCP_ENDPOINT, ZMQ.REQ, false);
         Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
         clientTransport.open();
         //String s = "abcdABCD";
@@ -106,7 +107,7 @@ public class TZMQSimpleServerTest {
         System.out.println("voidMethod");
         TZMQSimpleServer server = createServer();
         server.startAndWait();
-        TZMQTransport clientTransport = new TZMQTransport(context, INPROC_ENDPOINT, ZMQ.REQ, false);
+        TZMQTransport clientTransport = new TZMQTransport(context, TCP_ENDPOINT, ZMQ.REQ, false);
         Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
         clientTransport.open();
         String s = "abcdABCD";
@@ -116,7 +117,7 @@ public class TZMQSimpleServerTest {
 
     private static TZMQSimpleServer createServer() {
         Service1Impl impl = new Service1Impl();
-        TZMQTransportFactory socketFactory = new TZMQTransportFactory(context, INPROC_ENDPOINT, ZMQ.REP, true);
+        TZMQTransportFactory socketFactory = new TZMQTransportFactory(context, TCP_ENDPOINT, ZMQ.REP, true);
         TZMQSimpleServer.Args args = new TZMQSimpleServer.Args(socketFactory);
         args.protocolFactory(new TCompactProtocol.Factory())
                 .processor(new Service1.Processor<Service1.Iface>(impl));
