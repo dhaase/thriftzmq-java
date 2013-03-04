@@ -59,7 +59,7 @@ public class TZMQMultiThreadServer extends TZMQServer {
 
     private class Delegate extends AbstractExecutionThreadService {
 
-        private static final int POLL_TIMEOUT_MS = 100;
+        private static final int POLL_TIMEOUT_MS = 1000;
         
         private ZMQ.Socket frontend;
         private ZMQ.Socket backend;
@@ -110,14 +110,14 @@ public class TZMQMultiThreadServer extends TZMQServer {
                 poller.poll(POLL_TIMEOUT_MS);
                 if (poller.pollin(0)) {
                     do {
-                        message = frontend.recv(0);//TODO: Flags?
+                        message = frontend.recv(0);
                         more = frontend.hasReceiveMore();
                         backend.send(message, more ? ZMQ.SNDMORE : 0);
                     } while (more);
                 }
                 if (poller.pollin(1)) {
                     do {
-                        message = backend.recv(0);//TODO: Flags?
+                        message = backend.recv(0);
                         more = backend.hasReceiveMore();
                         frontend.send(message, more ? ZMQ.SNDMORE : 0);
                     } while (more);
@@ -144,7 +144,7 @@ public class TZMQMultiThreadServer extends TZMQServer {
 
                     }));
             try {
-                f.get(POLL_TIMEOUT_MS * 10, TimeUnit.MILLISECONDS);//TODO: Fix
+                f.get(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS);
             } catch (InterruptedException ex) {
                 logger.warn("Interrupted on shutdown", ex);
             } catch (ExecutionException ex) {

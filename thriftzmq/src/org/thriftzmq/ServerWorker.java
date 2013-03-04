@@ -68,8 +68,6 @@ class ServerWorker extends AbstractExecutionThreadService {
         poller.register(transportSocket.getSocket(), ZMQ.Poller.POLLIN);
         poller.register(commandSocket.getSocket(), ZMQ.Poller.POLLIN);
 
-        byte[] message;
-
         while (true) {
             poller.poll(POLL_TIMEOUT_MS);
             if (poller.pollin(0)) {
@@ -78,10 +76,9 @@ class ServerWorker extends AbstractExecutionThreadService {
                 TProcessor processor = processorFactory.getProcessor(transportSocket);
                 try {
                     processor.process(inputProtocol, outputProtocol);
-                    //TODO: flush()?
                 } catch (TException ex) {
-                    //TODO: Handle
-                    logger.error("Exception in request processor: {}",  ex);
+                    logger.error("Exception in request processor:",  ex);
+                    throw ex;
                 }
             }
             if (poller.pollin(1)) {

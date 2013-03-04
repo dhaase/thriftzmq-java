@@ -117,7 +117,7 @@ class TransportSocket extends TTransport {
         if (socket == null) {
             throw new IllegalStateException("Attempt to read from closed transport");
         }
-        byte[] r = socket.recv(0);//TODO: Flags?
+        byte[] r = socket.recv(0);
         hasReceiveMore = socket.hasReceiveMore();
         readBuffer.reset(r);
         return true;//Ok next frame is read
