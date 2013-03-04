@@ -6,31 +6,32 @@ package org.thriftzmq;
 
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
 import java.util.concurrent.atomic.AtomicLong;
+import org.apache.thrift.transport.TTransport;
 import org.jeromq.ZMQ;
 
 /**
  *
  * @author wildfire
  */
-public class TZMQTransportPool extends AbstractExecutionThreadService {
+public class TZMQClientPool extends AbstractExecutionThreadService {
 
     private static final int POLL_TIMEOUT_MS = 100;
     private static final AtomicLong socketId = new AtomicLong();
 
     private final ZMQ.Context context;
-    private final TZMQTransportFactory backendFactory;
-    private final TZMQTransportFactory clientFactory;
     private final String frontEndpoint;
+    private final String backendAddress;
+    private final TransportSocketFactory clientFactory;
 
-    private TZMQTransport frontend;
+    private ZMQ.Socket frontend;
     private ZMQ.Socket backend;
     private CommandSocket commandSocket;
 
-    public TZMQTransportPool(TZMQTransportFactory factory) {
-        this.context = factory.getContext();
-        this.backendFactory = factory;
+    public TZMQClientPool(ZMQ.Context context, String address) {
+        this.context = context;
+        this.backendAddress = address;
         this.frontEndpoint = "inproc://TZMQ_POOL_" + Long.toHexString(socketId.incrementAndGet());
-        this.clientFactory = new TZMQTransportFactory(context, frontEndpoint, ZMQ.REQ, false);
+        this.clientFactory = new TransportSocketFactory(context, frontEndpoint, ZMQ.REQ, false);
     }
 
     public ZMQ.Context getContext() {
@@ -39,11 +40,11 @@ public class TZMQTransportPool extends AbstractExecutionThreadService {
 
     @Override
     protected void startUp() throws Exception {
-        frontend = backendFactory.create();
-        frontend.open();
+        frontend = context.socket(ZMQ.ROUTER);
+        frontend.bind(frontEndpoint);
 
         backend = context.socket(ZMQ.DEALER);
-        backend.bind(frontEndpoint);
+        backend.connect(backendAddress);
 
         commandSocket = new CommandSocket(context);
         commandSocket.open();
@@ -52,7 +53,7 @@ public class TZMQTransportPool extends AbstractExecutionThreadService {
     @Override
     protected void run() throws Exception {
         ZMQ.Poller poller = context.poller(3);
-        poller.register(frontend.getSocket(), ZMQ.Poller.POLLIN);
+        poller.register(frontend, ZMQ.Poller.POLLIN);
         poller.register(backend, ZMQ.Poller.POLLIN);
         poller.register(commandSocket.getSocket(), ZMQ.Poller.POLLIN);
 
@@ -63,8 +64,8 @@ public class TZMQTransportPool extends AbstractExecutionThreadService {
             poller.poll(POLL_TIMEOUT_MS);
             if (poller.pollin(0)) {
                 do {
-                    message = frontend.getSocket().recv(0);//TODO: Flags?
-                    more = frontend.getSocket().hasReceiveMore();
+                    message = frontend.recv(0);//TODO: Flags?
+                    more = frontend.hasReceiveMore();
                     backend.send(message, more ? ZMQ.SNDMORE : 0);
                 } while (more);
             }
@@ -72,7 +73,7 @@ public class TZMQTransportPool extends AbstractExecutionThreadService {
                 do {
                     message = backend.recv(0);//TODO: Flags?
                     more = backend.hasReceiveMore();
-                    frontend.getSocket().send(message, more ? ZMQ.SNDMORE : 0);
+                    frontend.send(message, more ? ZMQ.SNDMORE : 0);
                 } while (more);
             }
             if (poller.pollin(2)) {
@@ -87,7 +88,7 @@ public class TZMQTransportPool extends AbstractExecutionThreadService {
     @Override
     protected void shutDown() throws Exception {
         //XXX: For now force closing sockets to prevent hang on shutdown
-        frontend.getSocket().setLinger(0);
+        frontend.setLinger(0);
         backend.setLinger(0);
         frontend.close();
         backend.close();
@@ -98,7 +99,7 @@ public class TZMQTransportPool extends AbstractExecutionThreadService {
         commandSocket.sendCommand(CommandSocket.STOP);
     }
 
-    public TZMQTransport getClient() {
+    public TTransport getClient() {
         return clientFactory.create();
     }
 

@@ -29,6 +29,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TCompactProtocol;
+import org.apache.thrift.transport.TTransport;
 import org.jeromq.ZMQ;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -81,7 +82,7 @@ public class TZMQSimpleServerTest {
         System.out.println("echo");
         TZMQSimpleServer server = createServer(TCP_ENDPOINT);
         server.startAndWait();
-        TZMQTransport clientTransport = new TZMQTransport(context, TCP_ENDPOINT, ZMQ.REQ, false);
+        TTransport clientTransport = TZMQClientFactory.create(context, TCP_ENDPOINT);
         Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
         clientTransport.open();
         String s = "abcdABCD";
@@ -98,7 +99,7 @@ public class TZMQSimpleServerTest {
         System.out.println("echoLong");
         TZMQSimpleServer server = createServer(TCP_ENDPOINT);
         server.startAndWait();
-        TZMQTransport clientTransport = new TZMQTransport(context, TCP_ENDPOINT, ZMQ.REQ, false);
+        TTransport clientTransport = TZMQClientFactory.create(context, TCP_ENDPOINT);
         Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
         clientTransport.open();
         //String s = "abcdABCD";
@@ -116,27 +117,22 @@ public class TZMQSimpleServerTest {
 
     private static class PoolClientWorker implements Callable<Void> {
 
-        private final TZMQTransportPool pool;
-        private final static AtomicInteger sendCount = new AtomicInteger();
-        private final static AtomicInteger recvCount = new AtomicInteger();
+        private final TZMQClientPool pool;
 
-        public PoolClientWorker(TZMQTransportPool pool) {
+        public PoolClientWorker(TZMQClientPool pool) {
             this.pool = pool;
         }
 
         @Override
         public Void call() throws Exception {
-            TZMQTransport clientTransport = pool.getClient();
+            TTransport clientTransport = pool.getClient();
             Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
             clientTransport.open();
             try {
-                String s = "abcdABCD";
-                sendCount.incrementAndGet();
+                String s = "abcdABCD"  + new Random().nextInt(1000000);
                 String r = client.echo(s);
                 assertEquals(s, r);
-                recvCount.incrementAndGet();
             } catch (Exception ex) {
-                recvCount.incrementAndGet();
                 logger.error("Error invoking server: {}", ex);
                 throw ex;
             } finally {
@@ -150,26 +146,17 @@ public class TZMQSimpleServerTest {
     public void testEchoPooled() throws Exception {
         System.out.println("testEchoPooled");
         TZMQSimpleServer server = createServer(TCP_ENDPOINT);
-        int initialCnt = Service1Impl.ECHO_INVOKE_COUNT.get();
         server.startAndWait();
         int cnt = 100;
         ListeningExecutorService executor = MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(10));
         List<ListenableFuture<Void>> fl = new ArrayList<ListenableFuture<Void>>();
-        TZMQTransportPool pool = new TZMQTransportPool(new TZMQTransportFactory(context, TCP_ENDPOINT, ZMQ.DEALER, false));
+        TZMQClientPool pool = new TZMQClientPool(context, TCP_ENDPOINT);
         pool.startAndWait();
         try {
             for (int i = 0; i < cnt; i++) {
                 fl.add(executor.submit(new PoolClientWorker(pool)));
             }
             Futures.successfulAsList(fl).get(5000, TimeUnit.MILLISECONDS);
-        } catch (TimeoutException ex) {
-            //XXX: This code is to debug rare hang when no response is received in one of clients
-            int invokedCnt = Service1Impl.ECHO_INVOKE_COUNT.get() - initialCnt;
-            int sendCnt = PoolClientWorker.sendCount.get();
-            int recvCnt = PoolClientWorker.recvCount.get();
-            logger.warn("Timed out while waiting for workers. Sent : {}, Received: {}, Server invoked: {}",
-                    new Object[] {sendCnt, recvCnt, invokedCnt});
-            throw ex;
         } finally {
             pool.stopAndWait();
             server.stopAndWait();
@@ -184,7 +171,7 @@ public class TZMQSimpleServerTest {
         System.out.println("voidMethod");
         TZMQSimpleServer server = createServer(TCP_ENDPOINT);
         server.startAndWait();
-        TZMQTransport clientTransport = new TZMQTransport(context, TCP_ENDPOINT, ZMQ.REQ, false);
+        TTransport clientTransport = TZMQClientFactory.create(context, TCP_ENDPOINT);
         Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
         clientTransport.open();
         String s = "abcdABCD";

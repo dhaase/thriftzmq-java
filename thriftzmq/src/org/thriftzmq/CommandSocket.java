@@ -24,7 +24,7 @@ import org.jeromq.ZMQ.Socket;
  * @author Vyacheslav Baranov
  */
 class CommandSocket {
-    
+
     private static final AtomicLong socketId = new AtomicLong();
 
     public static final byte STOP = 1;

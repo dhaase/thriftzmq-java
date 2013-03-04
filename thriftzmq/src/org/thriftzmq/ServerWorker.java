@@ -30,6 +30,7 @@ import org.slf4j.LoggerFactory;
  * @author Vyacheslav Baranov
  */
 class ServerWorker extends AbstractExecutionThreadService {
+
     private static final Logger logger = LoggerFactory.getLogger(ServerWorker.class);
 
     private static final int POLL_TIMEOUT_MS = 1000;
