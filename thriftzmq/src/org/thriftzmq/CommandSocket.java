@@ -51,7 +51,7 @@ class CommandSocket {
     }
 
     /**
-     * Closes command socket
+     * Closes command socket.
      *
      * This method must be called on owning thread.
      */
@@ -60,7 +60,7 @@ class CommandSocket {
     }
 
     /**
-     * Retrieves underlying ZeroMQ socket
+     * Retrieves underlying ZeroMQ socket.
      *
      * @return underlying ZeroMQ socket
      */
@@ -69,7 +69,7 @@ class CommandSocket {
     }
 
     /**
-     * Retrieves next command from the socket
+     * Retrieves next command from the socket.
      *
      * This method must be called on owning thread.
      *
@@ -81,7 +81,7 @@ class CommandSocket {
     }
 
     /**
-     * Sends a command to the socket
+     * Sends a command to the socket.
      *
      * Creates peer socket and sends specified command to it.
      *

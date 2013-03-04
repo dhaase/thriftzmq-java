@@ -15,9 +15,8 @@
  */
 package org.thriftzmq;
 
-import org.apache.thrift.TException;
-import org.apache.thrift.TProcessor;
-import org.apache.thrift.protocol.TProtocol;
+import com.google.common.util.concurrent.ListenableFuture;
+import java.util.concurrent.Executor;
 import org.jeromq.ZMQ;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,8 +29,8 @@ public class TZMQSimpleServer extends TZMQServer {
 
     public static class Args extends TZMQServer.AbstractServerArgs<Args> {
 
-        public Args(TZMQTransportFactory socketFactory) {
-            super(socketFactory);
+        public Args(ZMQ.Context context, String address) {
+            super(context, address);
         }
         
     }
@@ -40,64 +39,47 @@ public class TZMQSimpleServer extends TZMQServer {
 
     private static final int POLL_TIMEOUT_MS = 1000;
 
-    private ZMQ.Context context;
-    private TZMQTransport socket;
-    private CommandSocket commandSocket;
+    private final ServerWorker worker;
 
     public TZMQSimpleServer(Args args) {
         super(args);
+        TransportSocketFactory socketFactory = new TransportSocketFactory(context, address, ZMQ.REP, true);
+        worker = new ServerWorker(socketFactory, inputProtocolFactory, outputProtocolFactory, processorFactory);
     }
 
     @Override
-    protected void startUp() {
-        context = transportFactory.getContext();
-        socket = transportFactory.create();
-        commandSocket = new CommandSocket(context);
-        socket.open();
-        commandSocket.open();
+    public ListenableFuture<State> start() {
+        return worker.start();
     }
 
     @Override
-    public void run() {
-        ZMQ.Poller poller = context.poller(2);
-        poller.register(socket.getSocket(), ZMQ.Poller.POLLIN);
-        poller.register(commandSocket.getSocket(), ZMQ.Poller.POLLIN);
-
-        byte[] message;
-
-        while (true) {
-            poller.poll(POLL_TIMEOUT_MS);
-            if (poller.pollin(0)) {
-                TProtocol inputProtocol = inputProtocolFactory.getProtocol(socket);
-                TProtocol outputProtocol = outputProtocolFactory.getProtocol(socket);
-                TProcessor processor = processorFactory.getProcessor(socket);
-                try {
-                    processor.process(inputProtocol, outputProtocol);
-                    //TODO: flush()?
-                } catch (TException ex) {
-                    //TODO: Handle
-                    logger.error("Exception in request processor: {}",  ex);
-                }
-            }
-            if (poller.pollin(1)) {
-                byte cmd = commandSocket.recvCommand();
-                if (cmd == CommandSocket.STOP) {
-                    break;
-                }
-            }
-        }
+    public State startAndWait() {
+        return worker.startAndWait();
     }
 
     @Override
-    protected void shutDown() {
-        //XXX: For now force closing socket to prevent hang on shutdown
-        socket.getSocket().setLinger(0);
-        socket.close();
+    public boolean isRunning() {
+        return worker.isRunning();
     }
 
     @Override
-    protected void triggerShutdown() {
-        commandSocket.sendCommand(CommandSocket.STOP);
+    public State state() {
+        return worker.state();
+    }
+
+    @Override
+    public ListenableFuture<State> stop() {
+        return worker.stop();
+    }
+
+    @Override
+    public State stopAndWait() {
+        return worker.stopAndWait();
+    }
+
+    @Override
+    public void addListener(Listener listener, Executor executor) {
+        worker.addListener(listener, executor);
     }
 
 }

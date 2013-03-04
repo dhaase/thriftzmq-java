@@ -230,8 +230,7 @@ public class TZMQMultiThreadServerTest {
 
     private static TZMQMultiThreadServer createServer(String endpoint) {
         Service1Impl impl = new Service1Impl();
-        TZMQTransportFactory socketFactory = new TZMQTransportFactory(context, endpoint, ZMQ.ROUTER, true);
-        TZMQMultiThreadServer.Args args = new TZMQMultiThreadServer.Args(socketFactory);
+        TZMQMultiThreadServer.Args args = new TZMQMultiThreadServer.Args(context, endpoint);
         args.protocolFactory(new TCompactProtocol.Factory())
                 .processor(new Service1.Processor<Service1.Iface>(impl))
                 .threadCount(5);

@@ -17,11 +17,13 @@ package org.thriftzmq;
 
 import com.google.common.base.Function;
 import com.google.common.collect.Iterables;
+import com.google.common.util.concurrent.AbstractExecutionThreadService;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
@@ -40,8 +42,8 @@ public class TZMQMultiThreadServer extends TZMQServer {
         protected int threadCount = 1;
         protected ThreadGroup threadGroup = null;
 
-        public Args(TZMQTransportFactory transportFactory) {
-            super(transportFactory);
+        public Args(ZMQ.Context context, String address) {
+            super(context, address);
         }
 
         public Args threadCount(int threadCount) {
@@ -55,130 +57,172 @@ public class TZMQMultiThreadServer extends TZMQServer {
         }
     }
 
+    private class Delegate extends AbstractExecutionThreadService {
+
+        private static final int POLL_TIMEOUT_MS = 100;
+        
+        private ZMQ.Socket frontend;
+        private ZMQ.Socket backend;
+        private CommandSocket commandSocket;
+        private ServerWorker[] workers = null;
+
+        @Override
+        protected void startUp() throws InterruptedException, ExecutionException {
+
+            //Create workers
+            workers = new ServerWorker[threadCount];
+            for (int i = 0; i < threadCount; i++) {
+                workers[i] = new ServerWorker(workerSocketFactory, inputProtocolFactory, outputProtocolFactory, processorFactory);
+            }
+
+            //Create sockets
+            frontend = context.socket(ZMQ.ROUTER);
+            frontend.bind(address);
+            backend = context.socket(ZMQ.DEALER);
+            backend.bind(backEndpoint);
+            commandSocket = new CommandSocket(context);
+            commandSocket.open();
+
+            //Start workers
+            ListenableFuture<List<State>> f = Futures.successfulAsList(Iterables.transform(Arrays.asList(workers),
+                    new Function<ServerWorker, ListenableFuture<State>>() {
+
+                        @Override
+                        public ListenableFuture<State> apply(ServerWorker input) {
+                            return input.start();
+                        }
+
+                    }));
+            List<State> r = f.get();
+        }
+
+        @Override
+        public void run() {
+            ZMQ.Poller poller = context.poller(3);
+            poller.register(frontend, ZMQ.Poller.POLLIN);
+            poller.register(backend, ZMQ.Poller.POLLIN);
+            poller.register(commandSocket.getSocket(), ZMQ.Poller.POLLIN);
+
+            byte[] message;
+            boolean more;
+
+            while (true) {
+                poller.poll(POLL_TIMEOUT_MS);
+                if (poller.pollin(0)) {
+                    do {
+                        message = frontend.recv(0);//TODO: Flags?
+                        more = frontend.hasReceiveMore();
+                        backend.send(message, more ? ZMQ.SNDMORE : 0);
+                    } while (more);
+                }
+                if (poller.pollin(1)) {
+                    do {
+                        message = backend.recv(0);//TODO: Flags?
+                        more = backend.hasReceiveMore();
+                        frontend.send(message, more ? ZMQ.SNDMORE : 0);
+                    } while (more);
+                }
+                if (poller.pollin(2)) {
+                    byte cmd = commandSocket.recvCommand();
+                    if (cmd == CommandSocket.STOP) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        @Override
+        protected void shutDown() {
+            //TODO: Graceful shutdown
+            ListenableFuture<List<State>> f = Futures.successfulAsList(Iterables.transform(Arrays.asList(workers),
+                    new Function<ServerWorker, ListenableFuture<State>>() {
+
+                        @Override
+                        public ListenableFuture<State> apply(ServerWorker input) {
+                            return input.stop();
+                        }
+
+                    }));
+            try {
+                f.get(POLL_TIMEOUT_MS * 10, TimeUnit.MILLISECONDS);//TODO: Fix
+            } catch (InterruptedException ex) {
+                logger.warn("Interrupted on shutdown", ex);
+            } catch (ExecutionException ex) {
+                logger.warn("Exception while stopping workers", ex);
+            } catch (TimeoutException ex) {
+                logger.warn("Timeout on shutdown", ex);
+            }
+            //XXX: For now force closing sockets to prevent hang on shutdown
+            frontend.setLinger(0);
+            backend.setLinger(0);
+            frontend.close();
+            backend.close();
+
+            workers = null;
+        }
+
+        @Override
+        protected void triggerShutdown() {
+            commandSocket.sendCommand(CommandSocket.STOP);
+        }
+
+        @Override
+        protected String getServiceName() {
+            return "TZMQMultiThreadServer.Delegate";
+        }
+
+    }
+
     private static final Logger logger = LoggerFactory.getLogger(TZMQMultiThreadServer.class);
 
-    private static final int POLL_TIMEOUT_MS = 100;
     private static final AtomicLong socketId = new AtomicLong();
 
-    private int threadCount;
-    private String backEndpoint;
-    private ZMQ.Context context;
-    private TZMQTransport frontend;
-    private ZMQ.Socket backend;
-    private CommandSocket commandSocket;
-    private TZMQSimpleServer[] workers = null;
+    private final TransportSocketFactory workerSocketFactory;
+    private final int threadCount;
+    private final String backEndpoint;
+    private final Delegate delegate;
 
     public TZMQMultiThreadServer(Args args) {
         super(args);
         backEndpoint = "inproc://TZMQ_MTSERVER_" + Long.toHexString(socketId.incrementAndGet());
+        this.workerSocketFactory = new TransportSocketFactory(context, backEndpoint, ZMQ.REP, false);
         this.threadCount = args.threadCount;
+        this.delegate = new Delegate();
     }
 
     @Override
-    protected void startUp() throws InterruptedException, ExecutionException {
-
-        //Create workers
-        workers = new TZMQSimpleServer[threadCount];
-        this.context = transportFactory.getContext();
-        for (int i = 0; i < threadCount; i++) {
-            TZMQTransportFactory workerTransport = new TZMQTransportFactory(context, backEndpoint, ZMQ.REP, false);
-            TZMQSimpleServer.Args workerArgs = new TZMQSimpleServer.Args(workerTransport);
-            workerArgs.inputProtocolFactory(inputProtocolFactory)
-                    .outputProtocolFactory(outputProtocolFactory)
-                    .processorFactory(processorFactory);
-            workers[i] = new TZMQSimpleServer(workerArgs);
-        }
-
-        //Create sockets
-        context = transportFactory.getContext();
-        frontend = transportFactory.create();
-        frontend.open();
-        backend = context.socket(ZMQ.DEALER);
-        backend.bind(backEndpoint);
-        commandSocket = new CommandSocket(context);
-        commandSocket.open();
-
-        //Start workers
-        ListenableFuture<List<State>> f = Futures.successfulAsList(Iterables.transform(Arrays.asList(workers),
-                new Function<TZMQSimpleServer, ListenableFuture<State>>() {
-
-                    @Override
-                    public ListenableFuture<State> apply(TZMQSimpleServer input) {
-                        return input.start();
-                    }
-                    
-                }));
-        List<State> r = f.get();
+    public ListenableFuture<State> start() {
+        return delegate.start();
     }
 
     @Override
-    public void run() {
-        ZMQ.Poller poller = context.poller(3);
-        poller.register(frontend.getSocket(), ZMQ.Poller.POLLIN);
-        poller.register(backend, ZMQ.Poller.POLLIN);
-        poller.register(commandSocket.getSocket(), ZMQ.Poller.POLLIN);
-
-        byte[] message;
-        boolean more;
-
-        while (true) {
-            poller.poll(POLL_TIMEOUT_MS);
-            if (poller.pollin(0)) {
-                do {
-                    message = frontend.getSocket().recv(0);//TODO: Flags?
-                    more = frontend.getSocket().hasReceiveMore();
-                    backend.send(message, more ? ZMQ.SNDMORE : 0);
-                } while (more);
-            }
-            if (poller.pollin(1)) {
-                do {
-                    message = backend.recv(0);//TODO: Flags?
-                    more = backend.hasReceiveMore();
-                    frontend.getSocket().send(message, more ? ZMQ.SNDMORE : 0);
-                } while (more);
-            }
-            if (poller.pollin(2)) {
-                byte cmd = commandSocket.recvCommand();
-                if (cmd == CommandSocket.STOP) {
-                    break;
-                }
-            }
-        }
+    public State startAndWait() {
+        return delegate.startAndWait();
     }
 
     @Override
-    protected void shutDown() {
-        //TODO: Graceful shutdown
-        ListenableFuture<List<State>> f = Futures.successfulAsList(Iterables.transform(Arrays.asList(workers),
-                new Function<TZMQSimpleServer, ListenableFuture<State>>() {
-
-                    @Override
-                    public ListenableFuture<State> apply(TZMQSimpleServer input) {
-                        return input.stop();
-                    }
-
-                }));
-        try {
-            f.get(POLL_TIMEOUT_MS * 10, TimeUnit.MILLISECONDS);//TODO: Fix
-        } catch (InterruptedException ex) {
-            logger.warn("Interrupted on shutdown", ex);
-        } catch (ExecutionException ex) {
-            logger.warn("Exception while stopping workers", ex);
-        } catch (TimeoutException ex) {
-            logger.warn("Timeout on shutdown", ex);
-        }
-        //XXX: For now force closing sockets to prevent hang on shutdown
-        frontend.getSocket().setLinger(0);
-        backend.setLinger(0);
-        frontend.close();
-        backend.close();
-
-        workers = null;
+    public boolean isRunning() {
+        return delegate.isRunning();
     }
 
     @Override
-    protected void triggerShutdown() {
-        commandSocket.sendCommand(CommandSocket.STOP);
+    public State state() {
+        return delegate.state();
+    }
+
+    @Override
+    public ListenableFuture<State> stop() {
+        return delegate.stop();
+    }
+
+    @Override
+    public State stopAndWait() {
+        return delegate.stopAndWait();
+    }
+
+    @Override
+    public void addListener(Listener listener, Executor executor) {
+        delegate.addListener(listener, executor);
     }
 
 }

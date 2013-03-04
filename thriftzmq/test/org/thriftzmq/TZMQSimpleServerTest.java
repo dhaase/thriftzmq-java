@@ -23,7 +23,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -31,7 +30,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.jeromq.ZMQ;
-import org.jeromq.ZMQException;
 import org.junit.After;
 import org.junit.AfterClass;
 import static org.junit.Assert.*;
@@ -81,7 +79,7 @@ public class TZMQSimpleServerTest {
     @Test
     public void testEcho() throws TException, InterruptedException {
         System.out.println("echo");
-        TZMQSimpleServer server = createServer();
+        TZMQSimpleServer server = createServer(TCP_ENDPOINT);
         server.startAndWait();
         TZMQTransport clientTransport = new TZMQTransport(context, TCP_ENDPOINT, ZMQ.REQ, false);
         Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
@@ -98,7 +96,7 @@ public class TZMQSimpleServerTest {
     @Test
     public void testEchoLong() throws TException, InterruptedException {
         System.out.println("echoLong");
-        TZMQSimpleServer server = createServer();
+        TZMQSimpleServer server = createServer(TCP_ENDPOINT);
         server.startAndWait();
         TZMQTransport clientTransport = new TZMQTransport(context, TCP_ENDPOINT, ZMQ.REQ, false);
         Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
@@ -151,7 +149,7 @@ public class TZMQSimpleServerTest {
     @Test
     public void testEchoPooled() throws Exception {
         System.out.println("testEchoPooled");
-        TZMQSimpleServer server = createServer();
+        TZMQSimpleServer server = createServer(TCP_ENDPOINT);
         int initialCnt = Service1Impl.ECHO_INVOKE_COUNT.get();
         server.startAndWait();
         int cnt = 100;
@@ -184,7 +182,7 @@ public class TZMQSimpleServerTest {
     @Test
     public void testVoidMethod() throws TException, InterruptedException {
         System.out.println("voidMethod");
-        TZMQSimpleServer server = createServer();
+        TZMQSimpleServer server = createServer(TCP_ENDPOINT);
         server.startAndWait();
         TZMQTransport clientTransport = new TZMQTransport(context, TCP_ENDPOINT, ZMQ.REQ, false);
         Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
@@ -194,10 +192,9 @@ public class TZMQSimpleServerTest {
         server.stopAndWait();
     }
 
-    private static TZMQSimpleServer createServer() {
+    private static TZMQSimpleServer createServer(String endpoint) {
         Service1Impl impl = new Service1Impl();
-        TZMQTransportFactory socketFactory = new TZMQTransportFactory(context, TCP_ENDPOINT, ZMQ.REP, true);
-        TZMQSimpleServer.Args args = new TZMQSimpleServer.Args(socketFactory);
+        TZMQSimpleServer.Args args = new TZMQSimpleServer.Args(context, endpoint);
         args.protocolFactory(new TCompactProtocol.Factory())
                 .processor(new Service1.Processor<Service1.Iface>(impl));
         TZMQSimpleServer instance = new TZMQSimpleServer(args);

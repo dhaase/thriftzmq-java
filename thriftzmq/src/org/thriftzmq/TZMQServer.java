@@ -15,27 +15,30 @@
  */
 package org.thriftzmq;
 
-import com.google.common.util.concurrent.AbstractExecutionThreadService;
+import com.google.common.util.concurrent.Service;
 import org.apache.thrift.TProcessor;
 import org.apache.thrift.TProcessorFactory;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocolFactory;
+import org.jeromq.ZMQ;
 
 /**
  *
  * @author Vyacheslav Baranov
  */
-public abstract class TZMQServer extends AbstractExecutionThreadService {
+public abstract class TZMQServer implements Service {
 
     public static abstract class AbstractServerArgs<T extends AbstractServerArgs<T>> {
 
-        protected final TZMQTransportFactory transportFactory;
+        protected final ZMQ.Context context;
+        protected final String address;
         protected TProcessorFactory processorFactory;
         protected TProtocolFactory inputProtocolFactory = new TBinaryProtocol.Factory();
         protected TProtocolFactory outputProtocolFactory = new TBinaryProtocol.Factory();
 
-        public AbstractServerArgs(TZMQTransportFactory transportFactory) {
-            this.transportFactory = transportFactory;
+        public AbstractServerArgs(ZMQ.Context context, String address) {
+            this.context = context;
+            this.address = address;
         }
 
         @SuppressWarnings("unchecked")
@@ -70,13 +73,15 @@ public abstract class TZMQServer extends AbstractExecutionThreadService {
         }
     }
 
-    protected final TZMQTransportFactory transportFactory;
+    protected final ZMQ.Context context;
+    protected final String address;
     protected final TProcessorFactory processorFactory;
     protected final TProtocolFactory inputProtocolFactory;
     protected final TProtocolFactory outputProtocolFactory;
 
     public TZMQServer(AbstractServerArgs<?> args) {
-        this.transportFactory = args.transportFactory;
+        this.context = args.context;
+        this.address = args.address;
         this.processorFactory = args.processorFactory;
         this.inputProtocolFactory = args.inputProtocolFactory;
         this.outputProtocolFactory = args.outputProtocolFactory;
