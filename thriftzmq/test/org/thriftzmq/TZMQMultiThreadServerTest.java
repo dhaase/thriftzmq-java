@@ -50,7 +50,7 @@ public class TZMQMultiThreadServerTest {
     private static final Logger logger = LoggerFactory.getLogger(TZMQMultiThreadServerTest.class);
 
     private static final String INPROC_ENDPOINT = "inproc://service1";
-    private static final String TCP_ENDPOINT = "tcp://localhost:23541";
+    private static final String TCP_ENDPOINT = "tcp://127.0.0.1:23541";
 
     private static ZMQ.Context context;
 
@@ -59,7 +59,7 @@ public class TZMQMultiThreadServerTest {
 
     @BeforeClass
     public static void setUpClass() {
-        context = ZMQ.context();
+        context = ZMQ.context(1);
     }
 
     @AfterClass
@@ -135,6 +135,21 @@ public class TZMQMultiThreadServerTest {
         }
     }
 
+    @Test
+    public void testEchoMultiThreaded() throws TException, InterruptedException, ExecutionException {
+        System.out.println("echoMultiThreaded");
+        TZMQMultiThreadServer server = createServer(TCP_ENDPOINT);
+        server.startAndWait();
+        int cnt = 100;
+        ListeningExecutorService executor = MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(10));
+        List<ListenableFuture<Void>> fl = new ArrayList<ListenableFuture<Void>>();
+        for (int i = 0; i < 100; i++) {
+            fl.add(executor.submit(new ClientWorker(TCP_ENDPOINT)));
+        }
+        Futures.successfulAsList(fl).get();
+        server.stopAndWait();
+    }
+
     private static class PoolClientWorker implements Callable<Void> {
 
         private final TZMQTransportPool pool;
@@ -158,7 +173,7 @@ public class TZMQMultiThreadServerTest {
                 recvCount.incrementAndGet();
             } catch (Exception ex) {
                 recvCount.incrementAndGet();
-                logger.error("Error invoking server: {}", ex);
+                logger.error("Error invoking server:", ex);
                 throw ex;
             } finally {
                 clientTransport.close();
@@ -168,36 +183,21 @@ public class TZMQMultiThreadServerTest {
     }
 
     @Test
-    public void testEchoMultiThreaded() throws TException, InterruptedException, ExecutionException {
-        System.out.println("echoMultiThreaded");
-        TZMQMultiThreadServer server = createServer(TCP_ENDPOINT);
-        server.startAndWait();
-        int cnt = 20;
-        ListeningExecutorService executor = MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(10));
-        List<ListenableFuture<Void>> fl = new ArrayList<ListenableFuture<Void>>();
-        for (int i = 0; i < 100; i++) {
-            fl.add(executor.submit(new ClientWorker(TCP_ENDPOINT)));
-        }
-        Futures.successfulAsList(fl).get();
-        server.stopAndWait();
-    }
-
-    @Test
-    public void testEchoPooled() throws TException, InterruptedException, ExecutionException {
+    public void testEchoPooled() throws Exception {
         System.out.println("testEchoPooled");
-        TZMQMultiThreadServer server = createServer(INPROC_ENDPOINT);
+        TZMQMultiThreadServer server = createServer(TCP_ENDPOINT);
         int initialCnt = Service1Impl.ECHO_INVOKE_COUNT.get();
         server.startAndWait();
-        int cnt = 20;
+        int cnt = 100;
         ListeningExecutorService executor = MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(10));
         List<ListenableFuture<Void>> fl = new ArrayList<ListenableFuture<Void>>();
-        TZMQTransportPool pool = new TZMQTransportPool(new TZMQTransportFactory(context, INPROC_ENDPOINT, ZMQ.DEALER, false));
-        pool.start();
+        TZMQTransportPool pool = new TZMQTransportPool(new TZMQTransportFactory(context, TCP_ENDPOINT, ZMQ.DEALER, false));
+        pool.startAndWait();
         try {
             for (int i = 0; i < cnt; i++) {
                 fl.add(executor.submit(new PoolClientWorker(pool)));
             }
-            Futures.successfulAsList(fl).get(3000, TimeUnit.MILLISECONDS);
+            Futures.successfulAsList(fl).get(5000, TimeUnit.MILLISECONDS);
         } catch (TimeoutException ex) {
             //XXX: This code is to debug rare hang when no response is received in one of clients
             int invokedCnt = Service1Impl.ECHO_INVOKE_COUNT.get() - initialCnt;
@@ -205,6 +205,7 @@ public class TZMQMultiThreadServerTest {
             int recvCnt = PoolClientWorker.recvCount.get();
             logger.warn("Timed out while waiting for workers. Sent : {}, Received: {}, Server invoked: {}",
                     new Object[] {sendCnt, recvCnt, invokedCnt});
+            throw ex;
         } finally {
             pool.stopAndWait();
             server.stopAndWait();

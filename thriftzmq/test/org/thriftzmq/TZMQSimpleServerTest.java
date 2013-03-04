@@ -15,16 +15,31 @@
  */
 package org.thriftzmq;
 
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.jeromq.ZMQ;
+import org.jeromq.ZMQException;
 import org.junit.After;
 import org.junit.AfterClass;
 import static org.junit.Assert.*;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.thriftzmq.test.Service1;
 
 /**
@@ -33,8 +48,10 @@ import org.thriftzmq.test.Service1;
  */
 public class TZMQSimpleServerTest {
 
+    private static final Logger logger = LoggerFactory.getLogger(TZMQSimpleServerTest.class);
+
     private static final String INPROC_ENDPOINT = "inproc://service1";
-    private static final String TCP_ENDPOINT = "tcp://localhost:23541";
+    private static final String TCP_ENDPOINT = "tcp://127.0.0.1:23541";
 
     private static ZMQ.Context context;
 
@@ -43,7 +60,7 @@ public class TZMQSimpleServerTest {
 
     @BeforeClass
     public static void setUpClass() {
-        context = ZMQ.context();
+        context = ZMQ.context(1);
     }
 
     @AfterClass
@@ -97,6 +114,68 @@ public class TZMQSimpleServerTest {
         String r = client.echo(s);
         assertEquals(s, r);
         server.stopAndWait();
+    }
+
+    private static class PoolClientWorker implements Callable<Void> {
+
+        private final TZMQTransportPool pool;
+        private final static AtomicInteger sendCount = new AtomicInteger();
+        private final static AtomicInteger recvCount = new AtomicInteger();
+
+        public PoolClientWorker(TZMQTransportPool pool) {
+            this.pool = pool;
+        }
+
+        @Override
+        public Void call() throws Exception {
+            TZMQTransport clientTransport = pool.getClient();
+            Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
+            clientTransport.open();
+            try {
+                String s = "abcdABCD";
+                sendCount.incrementAndGet();
+                String r = client.echo(s);
+                assertEquals(s, r);
+                recvCount.incrementAndGet();
+            } catch (Exception ex) {
+                recvCount.incrementAndGet();
+                logger.error("Error invoking server: {}", ex);
+                throw ex;
+            } finally {
+                clientTransport.close();
+            }
+            return null;
+        }
+    }
+
+    @Test
+    public void testEchoPooled() throws Exception {
+        System.out.println("testEchoPooled");
+        TZMQSimpleServer server = createServer();
+        int initialCnt = Service1Impl.ECHO_INVOKE_COUNT.get();
+        server.startAndWait();
+        int cnt = 100;
+        ListeningExecutorService executor = MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(10));
+        List<ListenableFuture<Void>> fl = new ArrayList<ListenableFuture<Void>>();
+        TZMQTransportPool pool = new TZMQTransportPool(new TZMQTransportFactory(context, TCP_ENDPOINT, ZMQ.DEALER, false));
+        pool.startAndWait();
+        try {
+            for (int i = 0; i < cnt; i++) {
+                fl.add(executor.submit(new PoolClientWorker(pool)));
+            }
+            Futures.successfulAsList(fl).get(5000, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException ex) {
+            //XXX: This code is to debug rare hang when no response is received in one of clients
+            int invokedCnt = Service1Impl.ECHO_INVOKE_COUNT.get() - initialCnt;
+            int sendCnt = PoolClientWorker.sendCount.get();
+            int recvCnt = PoolClientWorker.recvCount.get();
+            logger.warn("Timed out while waiting for workers. Sent : {}, Received: {}, Server invoked: {}",
+                    new Object[] {sendCnt, recvCnt, invokedCnt});
+            throw ex;
+        } finally {
+            pool.stopAndWait();
+            server.stopAndWait();
+        }
     }
 
     /**

@@ -20,8 +20,6 @@ import org.apache.thrift.transport.TMemoryInputTransport;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
 import org.jeromq.ZMQ;
-import org.jeromq.ZMQ.Context;
-import org.jeromq.ZMQ.Socket;
 
 /**
  *
@@ -39,17 +37,17 @@ public class TZMQTransport extends TTransport {
 
     private ZMQ.Socket socket;
     private final ByteBuffer writeBuffer = ByteBuffer.allocate(WRITE_BUFFER_SIZE);
-    private TMemoryInputTransport readBuffer = new TMemoryInputTransport();
+    private final TMemoryInputTransport readBuffer = new TMemoryInputTransport();
     private boolean hasReceiveMore;
 
-    public TZMQTransport(Context context, String address, int socketType, boolean bind) {
+    public TZMQTransport(ZMQ.Context context, String address, int socketType, boolean bind) {
         this.context = context;
         this.address = address;
         this.socketType = socketType;
         this.bind = bind;
     }
 
-    public Socket getSocket() {
+    public ZMQ.Socket getSocket() {
         return socket;
     }
 
