@@ -98,37 +98,8 @@ public class TZMQMultiThreadServer extends TZMQServer {
 
         @Override
         public void run() {
-            ZMQ.Poller poller = context.poller(3);
-            poller.register(frontend, ZMQ.Poller.POLLIN);
-            poller.register(backend, ZMQ.Poller.POLLIN);
-            poller.register(commandSocket.getSocket(), ZMQ.Poller.POLLIN);
-
-            byte[] message;
-            boolean more;
-
-            while (true) {
-                poller.poll(POLL_TIMEOUT_MS);
-                if (poller.pollin(0)) {
-                    do {
-                        message = frontend.recv(0);
-                        more = frontend.hasReceiveMore();
-                        backend.send(message, more ? ZMQ.SNDMORE : 0);
-                    } while (more);
-                }
-                if (poller.pollin(1)) {
-                    do {
-                        message = backend.recv(0);
-                        more = backend.hasReceiveMore();
-                        frontend.send(message, more ? ZMQ.SNDMORE : 0);
-                    } while (more);
-                }
-                if (poller.pollin(2)) {
-                    byte cmd = commandSocket.recvCommand();
-                    if (cmd == CommandSocket.STOP) {
-                        break;
-                    }
-                }
-            }
+            ProxyLoop proxyLoop = new ProxyLoop(context, frontend, backend, commandSocket);
+            proxyLoop.run();
         }
 
         @Override
