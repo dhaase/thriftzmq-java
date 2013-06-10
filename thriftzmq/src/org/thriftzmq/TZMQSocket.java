@@ -25,7 +25,7 @@ import org.jeromq.ZMQ;
  *
  * @author Vyacheslav Baranov
  */
-class TransportSocket extends TTransport {
+public class TZMQSocket extends TTransport {
 
     //Size for output buffer
     private static final int WRITE_BUFFER_SIZE = 4096;
@@ -40,7 +40,7 @@ class TransportSocket extends TTransport {
     private final TMemoryInputTransport readBuffer = new TMemoryInputTransport();
     private boolean hasReceiveMore;
 
-    public TransportSocket(ZMQ.Context context, String address, int socketType, boolean bind) {
+    public TZMQSocket(ZMQ.Context context, String address, int socketType, boolean bind) {
         this.context = context;
         this.address = address;
         this.socketType = socketType;

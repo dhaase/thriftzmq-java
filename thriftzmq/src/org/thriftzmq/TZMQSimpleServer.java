@@ -32,7 +32,7 @@ public class TZMQSimpleServer extends TZMQServer {
         public Args(ZMQ.Context context, String address) {
             super(context, address);
         }
-        
+
     }
 
     private static final Logger logger = LoggerFactory.getLogger(TZMQSimpleServer.class);
@@ -43,7 +43,7 @@ public class TZMQSimpleServer extends TZMQServer {
 
     public TZMQSimpleServer(Args args) {
         super(args);
-        TransportSocketFactory socketFactory = new TransportSocketFactory(context, address, ZMQ.REP, true);
+        TZMQSocketFactory socketFactory = new TZMQSocketFactory(context, address, ZMQ.REP, true);
         worker = new ServerWorker(socketFactory, inputProtocolFactory, outputProtocolFactory, processorFactory);
     }
 

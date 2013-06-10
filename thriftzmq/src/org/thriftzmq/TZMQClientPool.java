@@ -32,7 +32,7 @@ public class TZMQClientPool extends AbstractExecutionThreadService {
     private final ZMQ.Context context;
     private final String frontEndpoint;
     private final String backendAddress;
-    private final TransportSocketFactory clientFactory;
+    private final TZMQSocketFactory clientFactory;
 
     private ZMQ.Socket frontend;
     private ZMQ.Socket backend;
@@ -42,7 +42,7 @@ public class TZMQClientPool extends AbstractExecutionThreadService {
         this.context = context;
         this.backendAddress = address;
         this.frontEndpoint = "inproc://TZMQ_POOL_" + Long.toHexString(socketId.incrementAndGet());
-        this.clientFactory = new TransportSocketFactory(context, frontEndpoint, ZMQ.REQ, false);
+        this.clientFactory = new TZMQSocketFactory(context, frontEndpoint, ZMQ.REQ, false);
     }
 
     public ZMQ.Context getContext() {

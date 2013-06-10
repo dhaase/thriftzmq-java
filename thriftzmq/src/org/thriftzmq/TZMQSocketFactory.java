@@ -21,14 +21,14 @@ import org.jeromq.ZMQ;
  *
  * @author Vyacheslav Baranov
  */
-class TransportSocketFactory {
+class TZMQSocketFactory {
 
     private final ZMQ.Context context;
     private final String address;
     private final int socketType;
     private final boolean bind;
 
-    public TransportSocketFactory(ZMQ.Context context, String address, int socketType, boolean bind) {
+    public TZMQSocketFactory(ZMQ.Context context, String address, int socketType, boolean bind) {
         this.context = context;
         this.address = address;
         this.socketType = socketType;
@@ -43,8 +43,8 @@ class TransportSocketFactory {
         return address;
     }
 
-    public TransportSocket create() {
-        return new TransportSocket(context, address, socketType, bind);
+    public TZMQSocket create() {
+        return new TZMQSocket(context, address, socketType, bind);
     }
 
 }

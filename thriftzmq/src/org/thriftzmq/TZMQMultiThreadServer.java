@@ -60,7 +60,7 @@ public class TZMQMultiThreadServer extends TZMQServer {
     private class Delegate extends AbstractExecutionThreadService {
 
         private static final int POLL_TIMEOUT_MS = 1000;
-        
+
         private ZMQ.Socket frontend;
         private ZMQ.Socket backend;
         private CommandSocket commandSocket;
@@ -148,7 +148,7 @@ public class TZMQMultiThreadServer extends TZMQServer {
 
     private static final AtomicLong socketId = new AtomicLong();
 
-    private final TransportSocketFactory workerSocketFactory;
+    private final TZMQSocketFactory workerSocketFactory;
     private final int threadCount;
     private final String backEndpoint;
     private final Delegate delegate;
@@ -156,7 +156,7 @@ public class TZMQMultiThreadServer extends TZMQServer {
     public TZMQMultiThreadServer(Args args) {
         super(args);
         backEndpoint = "inproc://TZMQ_MTSERVER_" + Long.toHexString(socketId.incrementAndGet());
-        this.workerSocketFactory = new TransportSocketFactory(context, backEndpoint, ZMQ.REP, false);
+        this.workerSocketFactory = new TZMQSocketFactory(context, backEndpoint, ZMQ.REP, false);
         this.threadCount = args.threadCount;
         this.delegate = new Delegate();
     }

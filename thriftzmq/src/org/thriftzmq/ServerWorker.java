@@ -35,15 +35,15 @@ class ServerWorker extends AbstractExecutionThreadService {
 
     private static final int POLL_TIMEOUT_MS = 1000;
 
-    private final TransportSocketFactory socketFactory;
+    private final TZMQSocketFactory socketFactory;
     private final TProtocolFactory inputProtocolFactory;
     private final TProtocolFactory outputProtocolFactory;
     private final TProcessorFactory processorFactory;
 
-    private TransportSocket transportSocket;
+    private TZMQSocket transportSocket;
     private CommandSocket commandSocket;
 
-    public ServerWorker(TransportSocketFactory socketFactory, 
+    public ServerWorker(TZMQSocketFactory socketFactory,
             TProtocolFactory inputProtocolFactory, TProtocolFactory outputProtocolFactory,
             TProcessorFactory processorFactory) {
         this.socketFactory = socketFactory;

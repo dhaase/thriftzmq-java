@@ -25,6 +25,6 @@ import org.jeromq.ZMQ;
 public class TZMQClientFactory {
 
     public static TTransport create(ZMQ.Context context, String address) {
-        return new TransportSocket(context, address, ZMQ.REQ, false);
+        return new TZMQSocket(context, address, ZMQ.REQ, false);
     }
 }
