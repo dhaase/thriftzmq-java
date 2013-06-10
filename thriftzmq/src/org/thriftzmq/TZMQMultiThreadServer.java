@@ -126,8 +126,10 @@ public class TZMQMultiThreadServer extends TZMQServer {
             //XXX: For now force closing sockets to prevent hang on shutdown
             frontend.setLinger(0);
             backend.setLinger(0);
+            commandSocket.getSocket().setLinger(0);
             frontend.close();
             backend.close();
+            commandSocket.close();
 
             workers = null;
         }

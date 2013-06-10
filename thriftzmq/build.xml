@@ -19,6 +19,13 @@
     <target name="-pre-compile-single" depends="compile-thrift-java,ivy-retrieve"/>
     <target name="-pre-compile-test" depends="compile-thrift-java,ivy-retrieve"/>
     <target name="-pre-compile-test-single" depends="compile-thrift-java,ivy-retrieve"/>
+
+    <target name="-create-artifacts" depends="-do-init">
+        <copy file="${dist.jar}" tofile="${dist.dir}/artifacts/thriftzmq-jar.jar"/>
+        <jar jarfile="${dist.dir}/artifacts/thriftzmq-source.jar" basedir="${src.dir}" includes="**/*"/>
+    </target>
+
+    <target name="publish-local" depends="jar,test,-create-artifacts,ivy-publish-local"/>
     <!--
 
     There exist several targets which are by default empty and which can be

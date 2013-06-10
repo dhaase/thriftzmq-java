@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- 
+<!--
 This file contains definitions of common targets for ivy
 -->
 <project name="jmq-ivy" xmlns:ivy="antlib:org.apache.ivy.ant">
     <description>This file contains definitions of common targets for ivy</description>
-    
+
     <target name="-init-ivy-props">
-        <fail unless="workspace.root.dir">Must set workspace.root</fail> 
+        <fail unless="workspace.root.dir">Must set workspace.root</fail>
         <fail message="${workspace.root.dir}/ant-ivy.properties doesn't exist, check workspace.root.dir property">
             <condition>
                 <not><available file="${workspace.root.dir}/common/ant-ivy.properties"/></not>
@@ -37,15 +37,15 @@ This file contains definitions of common targets for ivy
     </target>
 
     <target name="-init-ivy-settings" depends="-load-ivy">
-        <ivy:settings id="ariadn" file="${workspace.root.dir}/common/ivysettings.xml">
+        <ivy:settings id="thriftzmq" file="${workspace.root.dir}/common/ivysettings.xml">
         </ivy:settings>
     </target>
 
     <target name="-ivy-resolve" depends="-init-ivy-settings">
-        <ivy:resolve settingsRef="ariadn"/>
+        <ivy:resolve settingsRef="thriftzmq"/>
         <touch file="${build.dir}/ivy_resolve_ts.temp"/>
     </target>
-    
+
     <target name="-check-ivy-ts">
         <uptodate property="ivy-cache.uptodate" targetfile="${build.dir}/ivy_resolve_ts.temp">
              <srcfiles file="${basedir}/ivy.xml"/>
@@ -58,4 +58,11 @@ This file contains definitions of common targets for ivy
     <target name="ivy-retrieve" depends="-check-ivy-ts" unless="ivy-cache.uptodate">
         <antcall target="-ivy-resolve"/>
     </target>
+
+    <target name="ivy-publish-local" depends="-ivy-resolve">
+        <ivy:publish settingsRef="thriftzmq" resolver="local" overwrite="true">
+            <artifacts pattern="dist/artifacts/[artifact]-[type].[ext]" />
+        </ivy:publish>
+    </target>
+
 </project>

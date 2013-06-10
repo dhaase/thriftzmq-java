@@ -92,9 +92,16 @@ class ServerWorker extends AbstractExecutionThreadService {
 
     @Override
     protected void shutDown() {
-        //XXX: For now force closing socket to prevent hang on shutdown
-        transportSocket.getSocket().setLinger(0);
-        transportSocket.close();
+        try {
+            //XXX: For now force closing socket to prevent hang on shutdown
+            transportSocket.getSocket().setLinger(0);
+            transportSocket.close();
+            commandSocket.getSocket().setLinger(0);
+            commandSocket.close();
+        } catch (RuntimeException ex) {
+            logger.warn("Exception during shutdown", ex);
+            throw ex;
+        }
     }
 
     @Override

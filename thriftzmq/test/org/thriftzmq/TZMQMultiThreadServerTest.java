@@ -63,6 +63,8 @@ public class TZMQMultiThreadServerTest {
 
     @AfterClass
     public static void tearDownClass() {
+        logger.info("Terminating context");
+        context.term();
     }
 
     @Before
@@ -78,7 +80,7 @@ public class TZMQMultiThreadServerTest {
      */
     @Test
     public void testEcho() throws TException, InterruptedException {
-        System.out.println("echo");
+        logger.info("echo");
         TZMQMultiThreadServer server = createServer(TCP_ENDPOINT);
         server.startAndWait();
         TTransport clientTransport = TZMQClientFactory.create(context, TCP_ENDPOINT);
@@ -87,6 +89,7 @@ public class TZMQMultiThreadServerTest {
         String s = "abcdABCD";
         String r = client.echo(s);
         assertEquals(s, r);
+        clientTransport.close();
         server.stopAndWait();
     }
 
@@ -95,7 +98,7 @@ public class TZMQMultiThreadServerTest {
      */
     @Test
     public void testEchoLong() throws TException, InterruptedException {
-        System.out.println("echoLong");
+        logger.info("echoLong");
         TZMQMultiThreadServer server = createServer(TCP_ENDPOINT);
         server.startAndWait();
         TTransport clientTransport = TZMQClientFactory.create(context, TCP_ENDPOINT);
@@ -111,6 +114,7 @@ public class TZMQMultiThreadServerTest {
         String s = new String(c);
         String r = client.echo(s);
         assertEquals(s, r);
+        clientTransport.close();
         server.stopAndWait();
     }
 
@@ -138,9 +142,9 @@ public class TZMQMultiThreadServerTest {
         }
     }
 
-    @Test
+    //@Test
     public void testEchoMultiThreaded() throws TException, InterruptedException, ExecutionException {
-        System.out.println("echoMultiThreaded");
+        logger.info("echoMultiThreaded");
         TZMQMultiThreadServer server = createServer(TCP_ENDPOINT);
         server.startAndWait();
         int cnt = 100;
@@ -180,9 +184,9 @@ public class TZMQMultiThreadServerTest {
         }
     }
 
-    @Test
+    //@Test
     public void testEchoPooled() throws Exception {
-        System.out.println("testEchoPooled");
+        logger.info("testEchoPooled");
         TZMQMultiThreadServer server = createServer(TCP_ENDPOINT);
         server.startAndWait();
         int cnt = 100;
@@ -204,9 +208,9 @@ public class TZMQMultiThreadServerTest {
     /**
      * Test of voidMethod method
      */
-    //@Test
+    @Test
     public void testVoidMethod() throws TException, InterruptedException {
-        System.out.println("voidMethod");
+        logger.info("voidMethod");
         TZMQMultiThreadServer server = createServer(TCP_ENDPOINT);
         server.startAndWait();
         TTransport clientTransport = TZMQClientFactory.create(context, TCP_ENDPOINT);
@@ -214,6 +218,7 @@ public class TZMQMultiThreadServerTest {
         clientTransport.open();
         String s = "abcdABCD";
         client.voidMethod(s);
+        clientTransport.close();
         server.stopAndWait();
     }
 

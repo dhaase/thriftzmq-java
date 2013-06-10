@@ -8,6 +8,10 @@
         <conf name="compile"></conf>
         <conf name="test" visibility="private" extends="compile"></conf>
     </configurations>
+    <publications>
+        <artifact/>
+        <artifact type="source" ext="jar"/>
+    </publications>
     <dependencies>
         <dependency name="guava" org="com.google.guava" rev="13.0.1"/>
         <dependency name="jeromq" org="org.jeromq" rev="0.2.0"/>
