@@ -76,7 +76,7 @@
             <plugin>
                 <groupId>org.apache.thrift.tools</groupId>
                 <artifactId>maven-thrift-plugin</artifactId>
-                <version>0.1.11-SNAPSHOT</version>
+                <version>0.1.11</version>
                 <configuration>
 <!--                    <thriftExecutable>/usr/local/bin/thrift</thriftExecutable>-->
                 </configuration>
