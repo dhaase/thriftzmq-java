@@ -144,7 +144,7 @@ public class TZMQSimpleServerTest {
         }
     }
 
-    //@Test
+    @Test
     public void testEchoPooled() throws Exception {
         logger.info("testEchoPooled");
         TZMQSimpleServer server = createServer(TCP_ENDPOINT);

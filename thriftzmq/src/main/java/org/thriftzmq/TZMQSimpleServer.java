@@ -82,4 +82,10 @@ public class TZMQSimpleServer extends TZMQServer {
         worker.addListener(listener, executor);
     }
 
+    @Override
+    public Throwable failureCause() {
+        return worker.failureCause();
+    }
+
+
 }

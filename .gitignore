@@ -1,9 +1,7 @@
 #Build output
-build/
-dist/
+target/
 
 #Netbeans private files
-*/nbproject/private/
 
 #OS X
 .DS_Store

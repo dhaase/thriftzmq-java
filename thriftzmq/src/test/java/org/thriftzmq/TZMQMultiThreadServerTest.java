@@ -142,7 +142,7 @@ public class TZMQMultiThreadServerTest {
         }
     }
 
-    //@Test
+    @Test
     public void testEchoMultiThreaded() throws TException, InterruptedException, ExecutionException {
         logger.info("echoMultiThreaded");
         TZMQMultiThreadServer server = createServer(TCP_ENDPOINT);
@@ -184,7 +184,7 @@ public class TZMQMultiThreadServerTest {
         }
     }
 
-    //@Test
+    @Test
     public void testEchoPooled() throws Exception {
         logger.info("testEchoPooled");
         TZMQMultiThreadServer server = createServer(TCP_ENDPOINT);

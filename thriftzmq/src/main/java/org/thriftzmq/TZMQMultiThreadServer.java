@@ -66,6 +66,8 @@ public class TZMQMultiThreadServer extends TZMQServer {
         private CommandSocket commandSocket;
         private ServerWorker[] workers = null;
 
+        private Throwable failureCause;
+
         @Override
         protected void startUp() throws InterruptedException, ExecutionException {
 
@@ -139,10 +141,6 @@ public class TZMQMultiThreadServer extends TZMQServer {
             commandSocket.sendCommand(CommandSocket.STOP);
         }
 
-        @Override
-        protected String getServiceName() {
-            return "TZMQMultiThreadServer.Delegate";
-        }
 
     }
 
@@ -197,5 +195,11 @@ public class TZMQMultiThreadServer extends TZMQServer {
     public void addListener(Listener listener, Executor executor) {
         delegate.addListener(listener, executor);
     }
+
+    @Override
+    public Throwable failureCause() {
+        return delegate.failureCause();
+    }
+
 
 }
