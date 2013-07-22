@@ -97,25 +97,30 @@ public class TZMQMultiThreadServerTest {
      * Test of echo method with long argument
      */
     @Test
-    public void testEchoLong() throws TException, InterruptedException {
-        logger.info("echoLong");
-        TZMQMultiThreadServer server = createServer(TCP_ENDPOINT);
-        server.startAndWait();
-        TTransport clientTransport = TZMQClientFactory.create(context, TCP_ENDPOINT);
-        Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
-        clientTransport.open();
-        //String s = "abcdABCD";
-        int l = 1024 * 1024;
-        char c[] = new char[l];
-        Random rand = new Random(12345);
-        for (int i = 0; i < l; i++) {
-            c[i] = (char) (rand.nextInt(0x80 - 0x20) + 0x20);
+    public void testEchoLong() throws Throwable {
+        try {
+            logger.info("echoLong");
+            TZMQMultiThreadServer server = createServer(TCP_ENDPOINT);
+            server.startAndWait();
+            TTransport clientTransport = TZMQClientFactory.create(context, TCP_ENDPOINT);
+            Service1.Client client = new Service1.Client(new TCompactProtocol(clientTransport));
+            clientTransport.open();
+            //String s = "abcdABCD";
+            int l = 1024 * 1024;
+            char c[] = new char[l];
+            Random rand = new Random(12345);
+            for (int i = 0; i < l; i++) {
+                c[i] = (char) (rand.nextInt(0x80 - 0x20) + 0x20);
+            }
+            String s = new String(c);
+            String r = client.echo(s);
+            assertEquals(s, r);
+            clientTransport.close();
+            server.stopAndWait();
+        } catch (Throwable ex) {
+            logger.error("Error in test", ex);
+            throw ex;
         }
-        String s = new String(c);
-        String r = client.echo(s);
-        assertEquals(s, r);
-        clientTransport.close();
-        server.stopAndWait();
     }
 
     private static class ClientWorker implements Callable<Void> {

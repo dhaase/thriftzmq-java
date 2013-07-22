@@ -28,6 +28,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 import org.jeromq.ZMQ;
+import org.jeromq.ZMQException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -80,8 +81,13 @@ public class TZMQMultiThreadServer extends TZMQServer {
             //Create sockets
             frontend = context.socket(ZMQ.ROUTER);
             frontend.bind(address);
-            backend = context.socket(ZMQ.DEALER);
-            backend.bind(backEndpoint);
+            try {
+                backend = context.socket(ZMQ.DEALER);
+                backend.bind(backEndpoint);
+            } catch (ZMQException ex) {
+                frontend.close();
+                throw ex;
+            }
             commandSocket = new CommandSocket(context);
             commandSocket.open();
 
@@ -128,7 +134,6 @@ public class TZMQMultiThreadServer extends TZMQServer {
             //XXX: For now force closing sockets to prevent hang on shutdown
             frontend.setLinger(0);
             backend.setLinger(0);
-            commandSocket.getSocket().setLinger(0);
             frontend.close();
             backend.close();
             commandSocket.close();

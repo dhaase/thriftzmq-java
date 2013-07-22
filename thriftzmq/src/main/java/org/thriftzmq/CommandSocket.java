@@ -56,6 +56,8 @@ class CommandSocket {
      * This method must be called on owning thread.
      */
     public void close() {
+        //XXX: For now force closing sockets to prevent hang on shutdown
+        socket.setLinger(0);
         socket.close();
     }
 

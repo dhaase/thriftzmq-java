@@ -74,7 +74,6 @@ public class TZMQClientPool extends AbstractExecutionThreadService {
         backend.setLinger(0);
         frontend.close();
         backend.close();
-        commandSocket.getSocket().setLinger(0);
         commandSocket.close();
     }
 
